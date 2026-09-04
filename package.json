@@ -1,0 +1,7 @@
+{
+  "name": "urbus",
+  "version": "1.0.0",
+  "description": "UrBus - A comprehensive ride-sharing platform",
+  "private": true,
+  "type": "module"
+}

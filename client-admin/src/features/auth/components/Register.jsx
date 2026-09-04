@@ -66,20 +66,24 @@ export const Register = ({ onNavigate }) => {
             showError("Las contraseñas no coinciden.");
             return;
         }
+        if (password.length < 8 || password.length > 50) {
+            showError("La contraseña debe tener entre 8 y 50 caracteres.");
+            return;
+        }
         if (telefono.length !== 8) {
             showError("El teléfono debe tener 8 dígitos.");
             return;
         }
 
         const formData = new FormData();
-        formData.append("Name", nombre);
-        formData.append("Surname", apellido);
-        formData.append("Username", username);
-        formData.append("Email", email);
-        formData.append("Phone", telefono);
-        formData.append("Password", password);
+        formData.append("name", nombre);
+        formData.append("surname", apellido);
+        formData.append("username", username);
+        formData.append("email", email);
+        formData.append("phone", telefono);
+        formData.append("password", password);
         if (fotoFile) {
-            formData.append("ProfilePicture", fotoFile);
+            formData.append("profilePicture", fotoFile);
         }
 
         const result = await register(formData);
