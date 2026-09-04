@@ -1,5 +1,19 @@
 import axios from '../utils/axios.js';
-import { useAuthStore } from '../../features/auth/store/authStore.js';
+
+// authStore.js NO se importa de forma estática aquí a propósito: authStore.js
+// (y otros módulos que pasan por el barrel shared/api/index.js) terminan
+// importando de vuelta este archivo, formando un ciclo. Un import estático
+// aquí + un "export *" en el barrel en medio del ciclo hace que el enlazador
+// de módulos ESM a veces no resuelva "axiosAuth" a tiempo
+// (SyntaxError: does not provide an export named 'axiosAuth').
+// Cargarlo de forma diferida (dynamic import) rompe el ciclo por completo.
+let _authStorePromise = null;
+function getAuthStore() {
+    if (!_authStorePromise) {
+        _authStorePromise = import('../../features/auth/store/authStore.js').then((m) => m.useAuthStore);
+    }
+    return _authStorePromise;
+}
 
 const axiosAuth = axios.create({
     baseURL: import.meta.env.VITE_AUTH_URL,
@@ -13,7 +27,8 @@ const axiosAdmin = axios.create({
     headers: { 'Content-Type': 'application/json' },
 });
 
-axiosAuth.interceptors.request.use((config) => {
+axiosAuth.interceptors.request.use(async (config) => {
+    const useAuthStore = await getAuthStore();
     const token = useAuthStore.getState().token;
     config._axiosClient = 'auth';
 
@@ -22,7 +37,8 @@ axiosAuth.interceptors.request.use((config) => {
     return config;
 });
 
-axiosAdmin.interceptors.request.use((config) => {
+axiosAdmin.interceptors.request.use(async (config) => {
+    const useAuthStore = await getAuthStore();
     const token = useAuthStore.getState().token;
     config._axiosClient = 'admin';
 
@@ -47,6 +63,7 @@ const handleRefreshToken = async function (_error) {
         return Promise.reject(_error);
     }
 
+    const useAuthStore = await getAuthStore();
     const status = _error.response?.status;
     const errorCode = _error.response?.data?.error;
     const requestUrl = _original.url || '';
