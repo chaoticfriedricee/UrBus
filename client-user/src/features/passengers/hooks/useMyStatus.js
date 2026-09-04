@@ -1,6 +1,7 @@
 // src/features/passengers/hooks/useMyStatus.js
 import { useState, useCallback } from 'react';
 import passengerClient from '../../../shared/api/passengerClient';
+import { joinGroup as joinGroupRequest } from '../../../shared/api/groupApi';
 
 export function useMyStatus() {
     const [status, setStatus] = useState(null);
@@ -44,5 +45,21 @@ export function useMyStatus() {
         }
     }, [status]);
 
-    return { status, loading, error, notLinked, fetchStatus, toggleStatus };
+    const joinGroup = useCallback(async (code) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await joinGroupRequest(code);
+            await fetchStatus();
+            return { success: true, data: response.data?.data };
+        } catch (err) {
+            const msg = err.response?.data?.message ?? 'No se pudo unir al grupo';
+            setError(msg);
+            return { success: false, error: msg };
+        } finally {
+            setLoading(false);
+        }
+    }, [fetchStatus]);
+
+    return { status, loading, error, notLinked, fetchStatus, toggleStatus, joinGroup };
 }

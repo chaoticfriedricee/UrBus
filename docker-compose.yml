@@ -27,12 +27,13 @@ services:
 
   authentication-service:
     build:
-      context: ./authentication-service
-      dockerfile: ../dockerfiles/Dockerfile.auth-service
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.auth-service
     container_name: urbus_authentication_service
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:5166
+      PORT: 5166
       ConnectionStrings__DefaultConnection: "Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Port=5432"
       CloudinarySettings__CloudName: ${CLOUDINARY_CLOUD_NAME}
       CloudinarySettings__ApiKey: ${CLOUDINARY_API_KEY}
@@ -63,8 +64,8 @@ services:
 
   location-service:
     build:
-      context: ./location-service
-      dockerfile: ../dockerfiles/Dockerfile.location-service
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.location-service
     container_name: urbus_location_service
     environment:
       PORT: ${LOCATION_PORT}
@@ -82,8 +83,8 @@ services:
 
   notification-service:
     build:
-      context: ./notification-service
-      dockerfile: ../dockerfiles/Dockerfile.notification-service
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.notification-service
     container_name: urbus_notification_service
     environment:
       PORT: ${NOTIFICATION_PORT}
@@ -105,8 +106,8 @@ services:
 
   passenger-service:
     build:
-      context: ./passenger-service
-      dockerfile: ../dockerfiles/Dockerfile.passenger-service
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.passenger-service
     container_name: urbus_passenger_service
     environment:
       PORT: ${PASSENGER_PORT}
@@ -128,8 +129,8 @@ services:
 
   post-service:
     build:
-      context: ./post-service
-      dockerfile: ../dockerfiles/Dockerfile.post-service
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.post-service
     container_name: urbus_post_service
     environment:
       PORT: ${POST_PORT}
@@ -156,8 +157,15 @@ services:
     build:
       context: .
       dockerfile: ./dockerfiles/Dockerfile.client-admin
+      args:
+        VITE_LOCATION_SERVICE_URL: ${VITE_LOCATION_SERVICE_URL}
+        VITE_AUTH_URL: ${VITE_AUTH_URL}
+        VITE_POST_URL: ${VITE_POST_URL}
+        VITE_PASSENGER_URL: ${VITE_PASSENGER_URL}
+        VITE_NOTIFICATION_URL: ${VITE_NOTIFICATION_URL}
     container_name: urbus_client_admin
     environment:
+      PORT: ${CLIENT_ADMIN_PORT}
       VITE_LOCATION_SERVICE_URL: ${VITE_LOCATION_SERVICE_URL}
       VITE_AUTH_URL: ${VITE_AUTH_URL}
       VITE_POST_URL: ${VITE_POST_URL}
@@ -167,7 +175,7 @@ services:
       - ./client-admin:/app
       - /app/node_modules
     ports:
-      - "${CLIENT_ADMIN_PORT}:5173"
+      - "${CLIENT_ADMIN_PORT}:${CLIENT_ADMIN_PORT}"
     depends_on:
       - authentication-service
       - location-service

@@ -68,6 +68,19 @@ const NAV_ITEMS = [
     ),
   },
   {
+    label: "Grupos",
+    path: "/dashboard/groups",
+    roles: ["ADMIN_ROLE", "DRIVER_ROLE"],
+    icon: (
+      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" strokeLinecap="round" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" strokeLinecap="round" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
     label: "Usuarios",
     path: "/dashboard/users",
     adminOnly: true,
@@ -176,7 +189,10 @@ export const DashboardPage = () => {
 
         <nav style={styles.nav}>
           <p style={styles.navGroup}>Principal</p>
-          {NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === "ADMIN_ROLE").map((item) => {
+          {NAV_ITEMS.filter((item) =>
+            (!item.adminOnly || user?.role === "ADMIN_ROLE") &&
+            (!item.roles || item.roles.includes(user?.role))
+          ).map((item) => {
             const isActive =
               location.pathname === item.path ||
               location.pathname.startsWith(item.path + "/");

@@ -16,6 +16,7 @@ import { helmetOptions } from './helmet.configuration.js';
 import { requestLimit } from './rateLimit.configuration.js';
 import { errorHandler } from '../middlewares/handle-errors.js';
 import passengerRoutes from '../src/passenger/passenger.routes.js';
+import groupRoutes from '../src/group/group.routes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BASE_PATH = '/urbus/v1';
@@ -39,6 +40,7 @@ const routes = (app) => {
     });
 
     app.use(`${BASE_PATH}/passengers`, passengerRoutes);
+    app.use(`${BASE_PATH}/groups`, groupRoutes);
 };
 
 export const initServer = async () => {

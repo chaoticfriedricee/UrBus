@@ -70,7 +70,8 @@ export const getPassengers = async (req, res, next) => {
 export const getMyPassenger = async (req, res, next) => {
   try {
 
-    const passenger = await Passenger.findOne({ userId: req.user.id, isActive: true });
+    const passenger = await Passenger.findOne({ userId: req.user.id, isActive: true })
+      .populate('groupId', 'name code isActive');
 
     if (!passenger) {
       return res.status(404).json({

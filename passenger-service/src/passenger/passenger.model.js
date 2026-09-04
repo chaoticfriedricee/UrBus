@@ -39,6 +39,12 @@ const passengerSchema = new Schema(
     isActive: {
         type: Boolean,
         default: true
+    },
+
+    groupId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Group',
+        default: null
     }
 
 },

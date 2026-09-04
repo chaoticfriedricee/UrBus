@@ -13,6 +13,7 @@ import PassengerListItem from '../components/PassengerListItem';
 import PassengerFormModal from '../components/PassengerFormModal';
 import ConfirmModal from '../../../shared/components/common/ConfirmModal';
 import Button from '../../../shared/components/common/Button';
+import Input from '../../../shared/components/common/Input';
 import { Card, EmptyState, LoadingSpinner } from '../../../shared/components/common/Common';
 import { COLORS, SPACING, FONT_SIZE, MANAGER_ROLES, ROLES } from '../../../shared/constants/theme';
 
@@ -105,12 +106,41 @@ function ManagerPassengersView() {
   );
 }
 
+function JoinGroupCard({ loading, onJoin }) {
+  const [code, setCode] = useState('');
+  const [joining, setJoining] = useState(false);
+
+  const handleJoin = async () => {
+    if (!code.trim()) return;
+    setJoining(true);
+    await onJoin(code.trim());
+    setJoining(false);
+  };
+
+  return (
+    <Card style={styles.groupCard}>
+      <Text style={styles.groupTitle}>Únete a un grupo</Text>
+      <Text style={styles.groupSubtitle}>Ingresa el código que te compartió tu conductor</Text>
+      <Input
+        icon="qr-code"
+        placeholder="Ej. A3F9K2"
+        autoCapitalize="characters"
+        value={code}
+        onChangeText={setCode}
+        style={styles.groupInput}
+      />
+      <Button title="Unirme al grupo" onPress={handleJoin} loading={joining || loading} />
+    </Card>
+  );
+}
+
 function MyStatusView() {
-  const { status, loading, error, notLinked, fetchStatus, toggleStatus } = useMyStatus();
+  const { status, loading, error, notLinked, fetchStatus, toggleStatus, joinGroup } = useMyStatus();
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
   const isPresent = status?.status === 'PRESENT';
+  const group = status?.groupId;
 
   return (
     <View style={styles.container}>
@@ -132,17 +162,29 @@ function MyStatusView() {
           <EmptyState message={error} />
         </Card>
       ) : (
-        <Card style={styles.statusCard}>
-          <Text style={styles.statusLabel}>Tu estado actual</Text>
-          <Text style={[styles.statusValue, { color: isPresent ? COLORS.success : COLORS.warning }]}>
-            {isPresent ? 'PRESENTE' : 'AUSENTE'}
-          </Text>
-          <Button
-            title={isPresent ? 'Marcar como ausente' : 'Marcar como presente'}
-            onPress={toggleStatus}
-            loading={loading}
-          />
-        </Card>
+        <>
+          <Card style={styles.statusCard}>
+            <Text style={styles.statusLabel}>Tu estado actual</Text>
+            <Text style={[styles.statusValue, { color: isPresent ? COLORS.success : COLORS.warning }]}>
+              {isPresent ? 'PRESENTE' : 'AUSENTE'}
+            </Text>
+            <Button
+              title={isPresent ? 'Marcar como ausente' : 'Marcar como presente'}
+              onPress={toggleStatus}
+              loading={loading}
+            />
+          </Card>
+
+          {group ? (
+            <Card style={styles.groupCard}>
+              <Text style={styles.groupTitle}>Tu grupo</Text>
+              <Text style={styles.groupName}>{group.name}</Text>
+              <Text style={styles.groupSubtitle}>Código: {group.code}</Text>
+            </Card>
+          ) : (
+            <JoinGroupCard loading={loading} onJoin={joinGroup} />
+          )}
+        </>
       )}
     </View>
   );
@@ -166,4 +208,9 @@ const styles = StyleSheet.create({
   statusCard: { alignItems: 'center', padding: SPACING.lg },
   statusLabel: { fontSize: FONT_SIZE.md, color: COLORS.textLight, marginBottom: SPACING.xs },
   statusValue: { fontSize: FONT_SIZE.xl, fontWeight: '800', marginBottom: SPACING.lg },
+  groupCard: { padding: SPACING.lg, marginTop: SPACING.md },
+  groupTitle: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.xs },
+  groupSubtitle: { fontSize: FONT_SIZE.sm, color: COLORS.textMuted, marginBottom: SPACING.sm },
+  groupName: { fontSize: FONT_SIZE.lg, fontWeight: '800', color: COLORS.primary, marginBottom: 2 },
+  groupInput: { marginBottom: SPACING.sm },
 });
