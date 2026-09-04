@@ -1,0 +1,15 @@
+packages:
+  - 'authentication-service'
+  - 'client-admin'
+  - 'client-user'
+  - 'location-service'
+  - 'notification-service'
+  - 'passenger-service'
+  - 'post-service'
+  - 'pg_db'
+allowBuilds:
+  '@scarf/scarf': set this to true or false
+  argon2: set this to true or false
+  esbuild: set this to true or false
+  puppeteer: set this to true or false
+  unrs-resolver: set this to true or false

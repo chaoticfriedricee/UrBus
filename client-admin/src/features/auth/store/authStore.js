@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { login as loginRequest, register as registerRequest } from '../../../shared/api';
+import { login as loginRequest, register as registerRequest } from '../../../shared/api/auth.js';
 import { updateProfile as updateProfileRequest } from '../../../shared/api/profile.js';
 import { showError } from '../../../shared/utils/toast.js';
 
@@ -105,7 +105,24 @@ export const useAuthStore = create(
                     data,
                 };
             } catch (err) {
-                const message = err.response?.data?.message || 'Error al registrar usuario';
+                if (err.response?.status === 429) {
+                    const message = 'Demasiados intentos. Espera un minuto antes de volver a intentar.';
+                    set({ error: message, loading: false });
+                    showError(message);
+                    return { success: false, error: message };
+                }
+
+                // El backend manda { message: 'Invalid Arguments', errors: [{field, message}] }
+                // cuando falla la validación de campos. Si no mostramos "errors", el usuario
+                // (y nosotros) solo vemos el mensaje genérico "Invalid Arguments" y no hay
+                // forma de saber qué campo está mal sin abrir DevTools.
+                const fieldErrors = err.response?.data?.errors;
+                const message =
+                    (Array.isArray(fieldErrors) && fieldErrors.length > 0
+                        ? fieldErrors.map((e) => e.message).join(' | ')
+                        : null) ||
+                    err.response?.data?.message ||
+                    'Error al registrar usuario';
                 set({ error: message, loading: false });
                 return { success: false, error: message };
             }
@@ -138,4 +155,4 @@ export const useAuthStore = create(
         }),
         { name: 'auth-UB-store' }
     )
-); 
+);

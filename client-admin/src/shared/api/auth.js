@@ -7,9 +7,23 @@ export const login = async (data) => {
 
 // POST /api/v1/auth/register  (multipart/form-data)
 export const register = async (data) => {
-    return await axiosAuth.post('/auth/register', data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    // `data` ya llega como FormData construido en Register.jsx.
+    // No lo reconstruyas con Object.entries(data): un FormData no es un
+    // objeto plano enumerable, así que Object.entries(FormData) devuelve []
+    // y el payload se manda vacío. Si en algún otro lugar se llama a esta
+    // función con un objeto plano, esta rama lo convierte a FormData;
+    // si ya es FormData, se reenvía tal cual.
+    const formData = data instanceof FormData
+        ? data
+        : Object.entries(data).reduce((fd, [key, value]) => {
+            if (value !== undefined && value !== null) fd.append(key, value);
+            return fd;
+        }, new FormData());
+
+    // No fuerces el header Content-Type aquí: axios detecta que formData
+    // es una instancia de FormData y agrega automáticamente
+    // "multipart/form-data; boundary=..." con el boundary correcto.
+    return await axiosAuth.post('/auth/register', formData);
 };
 
 // POST /api/v1/auth/verify-email
