@@ -24,11 +24,45 @@ function generateToken(user) {
 }
 
 function verifyToken(token) {
-  return jwt.verify(token, env.jwt.secret, {
+  const payload = jwt.verify(token, env.jwt.secret, {
     issuer: env.jwt.issuer,
     audience: env.jwt.audience,
     clockTolerance: 0,
   });
+
+  if (payload.type === 'refresh') {
+    throw new Error('Token type mismatch');
+  }
+
+  return payload;
 }
 
-module.exports = { generateToken, verifyToken };
+function generateRefreshToken(user) {
+  const payload = {
+    sub: user.id,
+    jti: crypto.randomUUID(),
+    type: 'refresh',
+  };
+
+  return jwt.sign(payload, env.jwt.secret, {
+    issuer: env.jwt.issuer,
+    audience: env.jwt.audience,
+    expiresIn: `${env.jwt.refreshExpirationDays}d`,
+  });
+}
+
+function verifyRefreshToken(token) {
+  const payload = jwt.verify(token, env.jwt.secret, {
+    issuer: env.jwt.issuer,
+    audience: env.jwt.audience,
+    clockTolerance: 0,
+  });
+
+  if (payload.type !== 'refresh') {
+    throw new Error('Token type mismatch');
+  }
+
+  return payload;
+}
+
+module.exports = { generateToken, verifyToken, generateRefreshToken, verifyRefreshToken };

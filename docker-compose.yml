@@ -31,29 +31,38 @@ services:
       dockerfile: ./dockerfiles/Dockerfile.auth-service
     container_name: urbus_authentication_service
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:5166
-      PORT: 5166
-      ConnectionStrings__DefaultConnection: "Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Port=5432"
-      CloudinarySettings__CloudName: ${CLOUDINARY_CLOUD_NAME}
-      CloudinarySettings__ApiKey: ${CLOUDINARY_API_KEY}
-      CloudinarySettings__ApiSecret: ${CLOUDINARY_API_SECRET}
-      CloudinarySettings__BaseUrl: ${CLOUDINARY_BASE_URL}
-      CloudinarySettings__Folder: ${CLOUDINARY_FOLDER}
-      CloudinarySettings__DefaultAvatarPath: ${CLOUDINARY_DEFAULT_AVATAR}
-      SmtpSettings__Host: ${SMTP_HOST}
-      SmtpSettings__Port: ${SMTP_PORT}
-      SmtpSettings__Username: ${SMTP_USERNAME}
-      SmtpSettings__Password: ${SMTP_PASSWORD}
-      SmtpSettings__FromEmail: ${SMTP_FROM_EMAIL}
-      SmtpSettings__FromName: ${SMTP_FROM_NAME}
-      AppSettings__FrontendUrl: ${AUTH_FRONTEND_URL}
-      JwtSettings__SecretKey: ${JWT_SECRET}
-      JwtSettings__Issuer: ${JWT_ISSUER}
-      JwtSettings__Audience: ${JWT_AUDIENCE}
-      JwtSettings__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES}
-    volumes:
-      - ./authentication-service:/src
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${AUTH_PORT}
+      FRONTEND_URL: ${FRONTEND_URL}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_LOGGING: ${DB_LOGGING}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      CLOUDINARY_BASE_URL: ${CLOUDINARY_BASE_URL}
+      CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER}
+      CLOUDINARY_DEFAULT_AVATAR: ${CLOUDINARY_DEFAULT_AVATAR}
+      SMTP_ENABLED: ${SMTP_ENABLED}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USE_IMPLICIT_SSL: ${SMTP_USE_IMPLICIT_SSL}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME}
+      SMTP_TIMEOUT_MS: ${SMTP_TIMEOUT_MS}
+      SMTP_USE_FALLBACK: ${SMTP_USE_FALLBACK}
+      SMTP_IGNORE_CERTIFICATE_ERRORS: ${SMTP_IGNORE_CERTIFICATE_ERRORS}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      ADMIN_ALLOWED_ORIGINS: ${ADMIN_ALLOWED_ORIGINS}
+      AUTH_RATE_LIMIT_WINDOW_MINUTES: ${AUTH_RATE_LIMIT_WINDOW_MINUTES}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX}
+      API_RATE_LIMIT_WINDOW_MINUTES: ${API_RATE_LIMIT_WINDOW_MINUTES}
+      API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX}
     ports:
       - "${AUTH_PORT}:5166"
     depends_on:

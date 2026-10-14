@@ -33,6 +33,10 @@ const loginValidator = [
   body('password').notEmpty().withMessage('password es requerido'),
 ];
 
+const refreshTokenValidator = [
+  body('refreshToken').notEmpty().withMessage('refreshToken es requerido'),
+];
+
 /**
  * Equivalente a Email/VerifyEmailDto.cs
  */
@@ -84,6 +88,7 @@ const getUsersByRoleValidator = [
 module.exports = {
   registerValidator,
   loginValidator,
+  refreshTokenValidator,
   verifyEmailValidator,
   resendVerificationValidator,
   forgotPasswordValidator,

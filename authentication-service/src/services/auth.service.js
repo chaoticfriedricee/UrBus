@@ -127,11 +127,45 @@ async function loginAsync(loginDto) {
   logger.info('User login succeeded');
 
   const token = jwtTokenService.generateToken(user);
+  const refreshToken = jwtTokenService.generateRefreshToken(user);
 
   return {
     success: true,
     message: 'Login exitoso',
     token,
+    refreshToken,
+    userDetails: toUserDetailsDto(user),
+    expiresAt: new Date(Date.now() + env.jwt.expirationMinutes * 60 * 1000),
+  };
+}
+
+/**
+ * Renueva el access token a partir de un refresh token válido.
+ */
+async function refreshTokenAsync(refreshToken) {
+  if (!refreshToken) {
+    throw new UnauthorizedError('Refresh token no proporcionado');
+  }
+
+  let payload;
+  try {
+    payload = jwtTokenService.verifyRefreshToken(refreshToken);
+  } catch (err) {
+    throw new UnauthorizedError('Refresh token inválido o expirado');
+  }
+
+  const user = await userRepository.getByIdAsync(payload.sub).catch(() => null);
+  if (!user || !user.status) {
+    throw new UnauthorizedError('Usuario no encontrado o inactivo');
+  }
+
+  const token = jwtTokenService.generateToken(user);
+  const newRefreshToken = jwtTokenService.generateRefreshToken(user);
+
+  return {
+    success: true,
+    token,
+    refreshToken: newRefreshToken,
     userDetails: toUserDetailsDto(user),
     expiresAt: new Date(Date.now() + env.jwt.expirationMinutes * 60 * 1000),
   };
@@ -284,6 +318,7 @@ async function getUserByIdAsync(userId) {
 module.exports = {
   registerAsync,
   loginAsync,
+  refreshTokenAsync,
   verifyEmailAsync,
   resendVerificationEmailAsync,
   forgotPasswordAsync,

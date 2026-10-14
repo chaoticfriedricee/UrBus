@@ -12,6 +12,20 @@ const sequelize = new Sequelize(env.database.name, env.database.user, env.databa
   port: env.database.port,
   dialect: 'postgres',
   logging: env.database.logging ? (msg) => logger.debug(msg) : false,
+  dialectOptions: env.isProduction
+    ? { ssl: { require: true, rejectUnauthorized: false } }
+    : {},
+  pool: {
+    max: 5,
+    min: 0,
+    acquire: 30000,
+    idle: 10000,
+    evict: 15000,
+  },
+  retry: {
+    max: 3,
+    match: [/ConnectionError/, /ConnectionRefusedError/, /ConnectionTimedOutError/, /TimeoutError/, /ECONNRESET/],
+  },
   define: {
     underscored: true,
     timestamps: true,

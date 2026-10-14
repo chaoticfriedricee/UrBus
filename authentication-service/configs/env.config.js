@@ -39,6 +39,7 @@ const config = {
     issuer: process.env.JWT_ISSUER || 'UrBus',
     audience: process.env.JWT_AUDIENCE || 'UrBus',
     expirationMinutes: parseInt(process.env.JWT_EXPIRATION_MINUTES, 10) || 60,
+    refreshExpirationDays: parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS, 10) || 7,
   },
 
   cloudinary: {

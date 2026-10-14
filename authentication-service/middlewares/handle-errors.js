@@ -10,6 +10,16 @@ const logger = require('../configs/logger.configuration');
 module.exports = function handleErrors(err, req, res, next) {
   logger.error(err.stack || err.message || 'An unhandled exception occurred');
 
+  if (err.name === 'MulterError') {
+    return res.status(400).json({
+      success: false,
+      message: mapMulterMessage(err),
+      errorCode: err.code || null,
+      traceId: req.id || '',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   const statusCode = err.statusCode || mapErrorNameToStatus(err) || 500;
 
   const response = {
@@ -22,6 +32,16 @@ module.exports = function handleErrors(err, req, res, next) {
 
   res.status(statusCode).json(response);
 };
+
+function mapMulterMessage(err) {
+  if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+    return `Campo de archivo inesperado: '${err.field}'. El campo debe llamarse 'profilePicture'`;
+  }
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return 'El archivo supera el tamaño máximo permitido (10MB)';
+  }
+  return err.message || 'Error al procesar el archivo';
+}
 
 /**
  * Réplica de MapInvalidOperation (.NET): infiere el código HTTP a partir
