@@ -66,7 +66,14 @@ function getFullImageUrl(imagePath) {
   const folder = env.cloudinary.folder || 'auth_ks_in6av/profiles';
   const defaultPath = env.cloudinary.defaultAvatarPath || 'avatarDefault-1749508519496.png';
 
-  let pathToUse = imagePath || defaultPath;
+  // El avatar por defecto vive tal cual se configuró en CLOUDINARY_DEFAULT_AVATAR
+  // (en la raíz si no trae carpeta), no dentro de la carpeta de perfiles.
+  const defaultFileName = defaultPath.split('/').pop();
+  if (!imagePath || imagePath === defaultFileName || imagePath === defaultPath) {
+    return `${baseUrl}${defaultPath}`;
+  }
+
+  let pathToUse = imagePath;
   if (!pathToUse.includes('/')) pathToUse = `${folder}/${pathToUse}`;
 
   return `${baseUrl}${pathToUse}`;
