@@ -34,10 +34,23 @@ router.get('/:userId/roles', adminOnly, getProfileByIdValidator, validate, users
 // GET /api/v1/users/by-role?roleName=...
 router.get('/by-role', adminOnly, getUsersByRoleValidator, validate, usersController.getUsersByRole);
 
+// El panel admin manda la foto como "ProfilePicture" (DTO .NET) y la app móvil como
+// "profilePicture"; se aceptan ambos y se deja en req.file como con upload.single.
+const profilePictureUpload = [
+  upload.fields([
+    { name: 'ProfilePicture', maxCount: 1 },
+    { name: 'profilePicture', maxCount: 1 },
+  ]),
+  (req, res, next) => {
+    req.file = req.files?.ProfilePicture?.[0] || req.files?.profilePicture?.[0];
+    next();
+  },
+];
+
 // PUT /api/v1/users/:userId/profile (multipart/form-data) — el propio usuario o un admin
 router.put(
   '/:userId/profile',
-  upload.single('ProfilePicture'),
+  profilePictureUpload,
   getProfileByIdValidator,
   validate,
   usersController.updateProfile,
