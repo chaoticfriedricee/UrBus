@@ -1,11 +1,12 @@
 import axios from '../utils/axios.js';
 import { useAuthStore } from '../../features/auth/store/authStore.js';
+import { withTokenRefresh } from './api.js';
 
-const axiosGroup = axios.create({
+const axiosGroup = withTokenRefresh(axios.create({
     baseURL: import.meta.env.VITE_PASSENGER_URL,
     timeout: 8000,
     headers: { 'Content-Type': 'application/json' },
-});
+}));
 
 axiosGroup.interceptors.request.use((config) => {
     const token = useAuthStore.getState().token;

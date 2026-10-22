@@ -1,11 +1,12 @@
 import axios from '../utils/axios.js';
 import { useAuthStore } from '../../features/auth/store/authStore.js';
+import { withTokenRefresh } from './api.js';
 
-const axiosPost = axios.create({
+const axiosPost = withTokenRefresh(axios.create({
     baseURL: import.meta.env.VITE_POST_URL,
     timeout: 8000,
     headers: { 'Content-Type': 'application/json' },
-});
+}));
 
 axiosPost.interceptors.request.use((config) => {
     const token = useAuthStore.getState().token;

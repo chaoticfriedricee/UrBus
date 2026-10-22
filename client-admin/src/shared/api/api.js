@@ -73,7 +73,8 @@ const handleRefreshToken = async function (_error) {
     const shouldRefresh = shouldAttemptRefresh || shouldAttemptRefreshFrom403;
 
     if(shouldRefresh){
-        const retryClient = _original._axiosClient === 'admin' ? axiosAdmin : axiosAuth;
+        const retryClient = _original._retryClient
+            || (_original._axiosClient === 'admin' ? axiosAdmin : axiosAuth);
 
         if(_isRefreshing){
             return new Promise(function (resolve, reject) {
@@ -104,7 +105,8 @@ const handleRefreshToken = async function (_error) {
                 token: token,
                 refreshToken: newRefreshToken,
                 expiresAt: expiresAt,
-                user: userDetails || useAuthStore.getState().user,
+                // userDetails solo trae id/username/foto/rol: se mezcla para no perder nombre, teléfono, etc.
+                user: { ...useAuthStore.getState().user, ...userDetails },
                 isAuthenticated: true,
             });
 
@@ -127,6 +129,18 @@ const handleRefreshToken = async function (_error) {
 axiosAuth.interceptors.response.use((res) => res, handleRefreshToken);
 axiosAdmin.interceptors.response.use((res) => res, handleRefreshToken);
 
+// Conecta la renovación automática del token a los clientes de los otros
+// servicios (pasajeros, grupos, posts). Sin esto, al vencer el access token
+// esas llamadas quedaban respondiendo 401 hasta volver a iniciar sesión.
+const withTokenRefresh = (instance) => {
+    instance.interceptors.request.use((config) => {
+        config._retryClient = instance;
+        return config;
+    });
+    instance.interceptors.response.use((res) => res, handleRefreshToken);
+    return instance;
+};
+
 // ------
 
-export { axiosAuth, axiosAdmin };
+export { axiosAuth, axiosAdmin, withTokenRefresh };
