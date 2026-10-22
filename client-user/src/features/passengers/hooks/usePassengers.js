@@ -1,8 +1,7 @@
 // src/features/passengers/hooks/usePassengers.js
 // Gestión de la lista de pasajeros — función portada de client-admin
 // (features/passangers/store/passengerStore.js). Disponible para DRIVER_ROLE y
-// ADMIN_ROLE; el toggle de estado también funciona para el propio pasajero.
-// Nota: el backend no expone edición de nombre, solo alta, baja y estado.
+// ADMIN_ROLE; el toggle de estado solo lo pueden usar ellos (no el pasajero).
 import { useState, useCallback } from 'react';
 import { getPassengers, createPassenger, updatePassengerStatus, deletePassenger } from '../../../shared/api/passengerApi';
 

@@ -28,23 +28,6 @@ export function useMyStatus() {
         }
     }, []);
 
-    const toggleStatus = useCallback(async () => {
-        if (!status) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const nextStatus = status.status === 'PRESENT' ? 'AUSENT' : 'PRESENT';
-            const passengerId = status._id ?? status.id;
-            const response = await passengerClient.patch(`/passengers/${passengerId}/status`, { status: nextStatus });
-            const data = response.data.data ?? response.data;
-            setStatus(data);
-        } catch (err) {
-            setError(err.response?.data?.message ?? 'No se pudo actualizar tu estado');
-        } finally {
-            setLoading(false);
-        }
-    }, [status]);
-
     const joinGroup = useCallback(async (code) => {
         setLoading(true);
         setError(null);
@@ -61,5 +44,5 @@ export function useMyStatus() {
         }
     }, [fetchStatus]);
 
-    return { status, loading, error, notLinked, fetchStatus, toggleStatus, joinGroup };
+    return { status, loading, error, notLinked, fetchStatus, joinGroup };
 }

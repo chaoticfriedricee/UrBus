@@ -25,7 +25,7 @@ export const createPassenger = (data) =>
 export const updatePassenger = (id, data) =>
     axiosPassenger.put(`/passengers/${id}`, data);
 
-// PATCH /api/v1/passengers/:id/status  — ADMIN, DRIVER o propio PASSENGER
+// PATCH /api/v1/passengers/:id/status  — solo ADMIN o DRIVER
 export const updatePassengerStatus = (id, data) =>
     axiosPassenger.patch(`/passengers/${id}/status`, { status: data });
 

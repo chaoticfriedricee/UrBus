@@ -135,7 +135,7 @@ function JoinGroupCard({ loading, onJoin }) {
 }
 
 function MyStatusView() {
-  const { status, loading, error, notLinked, fetchStatus, toggleStatus, joinGroup } = useMyStatus();
+  const { status, loading, error, notLinked, fetchStatus, joinGroup } = useMyStatus();
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
@@ -147,7 +147,7 @@ function MyStatusView() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Mi Asistencia</Text>
-          <Text style={styles.headerSubtitle}>Marca si vas a abordar el bus hoy</Text>
+          <Text style={styles.headerSubtitle}>Tu estado de abordaje de hoy</Text>
         </View>
       </View>
 
@@ -168,11 +168,8 @@ function MyStatusView() {
             <Text style={[styles.statusValue, { color: isPresent ? COLORS.success : COLORS.warning }]}>
               {isPresent ? 'PRESENTE' : 'AUSENTE'}
             </Text>
-            <Button
-              title={isPresent ? 'Marcar como ausente' : 'Marcar como presente'}
-              onPress={toggleStatus}
-              loading={loading}
-            />
+            {/* La asistencia solo la marcan el conductor o un administrador (passenger-service) */}
+            <Text style={styles.statusLabel}>El conductor marca tu asistencia al abordar.</Text>
           </Card>
 
           {group ? (
