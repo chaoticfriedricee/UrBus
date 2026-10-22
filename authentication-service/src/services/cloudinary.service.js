@@ -1,3 +1,4 @@
+const path = require('path');
 const { v2: cloudinary } = require('cloudinary');
 const env = require('../../configs/env.config');
 
@@ -17,13 +18,15 @@ cloudinary.config({
  */
 async function uploadImageAsync(file, fileName) {
   try {
-    const publicId = `${env.cloudinary.folder}/${fileName}`;
+    // El public_id ya incluye la carpeta (no se pasa `folder`, o Cloudinary la
+    // duplica) y va sin extensión (Cloudinary agrega el formato al servirla).
+    // Así la URL que arma getFullImageUrl(`<folder>/<fileName>`) coincide.
+    const publicId = `${env.cloudinary.folder}/${path.parse(fileName).name}`;
 
     await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           public_id: publicId,
-          folder: env.cloudinary.folder,
           transformation: [
             { width: 400, height: 400, crop: 'fill', gravity: 'face' },
             { quality: 'auto', fetch_format: 'auto' },
