@@ -15,7 +15,7 @@ export const createGroup = async (req, res, next) => {
 
     const { name } = req.body;
 
-    if (!name || !name.trim()) {
+    if (typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({
         success: false,
         message: 'El nombre del grupo es obligatorio'
@@ -146,6 +146,13 @@ export const updateGroup = async (req, res, next) => {
 
     const { name, isActive } = req.body;
 
+    if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre del grupo debe ser un texto no vacío'
+      });
+    }
+
     if (name !== undefined) group.name = name.trim();
     if (isActive !== undefined) group.isActive = isActive;
 
@@ -211,7 +218,7 @@ export const joinGroup = async (req, res, next) => {
 
     const { code } = req.body;
 
-    if (!code || !code.trim()) {
+    if (typeof code !== 'string' || !code.trim()) {
       return res.status(400).json({
         success: false,
         message: 'El código del grupo es obligatorio'
