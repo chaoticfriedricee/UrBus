@@ -13,7 +13,7 @@ export const getUserById = async (userId) => {
 
 // PUT /api/v1/users/:userId/role?roleName=... — requiere ADMIN_ROLE
 export const updateUserRole = async (userId, roleName) => {
-    return await axiosAuth.put(`/users/${userId}/role`, null, {
+    return await axiosAuth.put(`/users/${userId}/role`, {}, {
         params: { roleName },
     });
 };
