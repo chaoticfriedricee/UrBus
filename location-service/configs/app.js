@@ -68,17 +68,26 @@ export const initServer = async () => {
             console.log("Usuario conectado");
 
             socket.on("busLocation", (coords) => {
+                // Ignorar payloads inválidos: un coords null/string tumbaba el proceso
+                const lat = Number(coords?.lat);
+                const lng = Number(coords?.lng);
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
                 // Reenviar ubicación a todos
-                io.emit("updateBus", coords);
+                io.emit("updateBus", { lat, lng });
 
                 // Verificar llegada a Kinal
-                const distanceLat = Math.abs(coords.lat - kinalCoords.lat);
-                const distanceLng = Math.abs(coords.lng - kinalCoords.lng);
+                const distanceLat = Math.abs(lat - kinalCoords.lat);
+                const distanceLng = Math.abs(lng - kinalCoords.lng);
+                const isAtKinal = distanceLat <= tolerance && distanceLng <= tolerance;
 
-                if (!busArrived && distanceLat <= tolerance && distanceLng <= tolerance) {
+                if (!busArrived && isAtKinal) {
                     busArrived = true;
                     console.log("🚍 Bus llegó a Kinal");
                     io.emit("busArrived");
+                } else if (busArrived && !isAtKinal) {
+                    // El bus salió de Kinal: permitir avisar la siguiente llegada
+                    busArrived = false;
                 }
             });
         });
