@@ -1,6 +1,8 @@
 import { useState } from "react";
 import urbuLogo from "../../../assets/img/UrBus-logo.png";
 import { Spinner } from "./Spinner.jsx";
+import { resendVerification } from "../../../shared/api";
+import { showError, showSuccess } from "../../../shared/utils/toast.js";
 
 const EmailIcon = () => (
     <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
@@ -14,12 +16,31 @@ export const ResendVerification = ({ onNavigate }) => {
     const [loading, setLoading] = useState(false);
     const [sent, setSent] = useState(false);
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
+        if (!email.trim()) {
+            showError("Por favor ingresa tu correo electrónico.");
+            return;
+        }
+
         setLoading(true);
-        setTimeout(() => {
-        setLoading(false);
-        setSent(true);
-        }, 1500);
+        try {
+            // El backend responde 200 con success:false si el usuario no existe o ya está verificado
+            const { data } = await resendVerification(email.trim());
+            if (!data?.success) {
+                showError(data?.message || "No se pudo reenviar la verificación.");
+                return;
+            }
+            setSent(true);
+            showSuccess("Correo de verificación enviado.");
+        } catch (err) {
+            const message =
+                err.response?.data?.errors?.[0]?.message ||
+                err.response?.data?.message ||
+                "Error al reenviar la verificación.";
+            showError(message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
