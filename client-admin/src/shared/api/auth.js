@@ -5,6 +5,11 @@ export const login = async (data) => {
     return await axiosAuth.post('/auth/login', data);
 };
 
+// GET /api/v1/auth/me — perfil completo del usuario autenticado
+export const getMe = async () => {
+    return await axiosAuth.get('/auth/me');
+};
+
 // POST /api/v1/auth/register  (multipart/form-data)
 export const register = async (data) => {
     // `data` ya llega como FormData construido en Register.jsx.
