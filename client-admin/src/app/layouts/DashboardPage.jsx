@@ -3,7 +3,6 @@ import { Outlet, useNavigate, useLocation, NavLink } from "react-router-dom";
 import { useAuthStore } from "../../features/auth/store/authStore.js";
 import { usePostStore } from "../../features/post/store/postStore.js";
 import { styles } from "../../styles/dashboard.js";
-import { WhatsAppBubble } from "../../features/whatsapp/components/WhatsAppBubble.jsx";
 import { ProfileModal } from "../../features/auth/components/ProfileModal.jsx";
 import userDefault from "../../assets/img/user.png";
 import urBusLogo from "../../assets/img/UrBus-logo.png";
@@ -329,8 +328,6 @@ export const DashboardPage = () => {
           <Outlet />
         </main>
       </div>
-
-      {['ADMIN_ROLE', 'DRIVER_ROLE'].includes(user?.role) && <WhatsAppBubble />}
 
       {/* Modal de perfil */}
       {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}

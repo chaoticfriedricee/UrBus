@@ -64,7 +64,6 @@ Actualmente se está trabajando en:
 * Autenticación con JWT, refresh token, verificación de correo y recuperación de contraseña
 * Registro con imagen opcional de perfil en AuthenticationService
 * Servicio de localización en tiempo real con Socket.IO
-* Envío de notificaciones WhatsApp y consulta de grupos
 * Gestión de pasajeros con rutas protegidas por JWT
 * Publicaciones con carga de imágenes y soft delete
 * Interfaz administrativa React/Vite en `client-admin`
@@ -84,9 +83,6 @@ La plataforma está diseñada para crecer mediante servicios independientes.
 * **LocationService**
   Gestión de ubicación en tiempo real del bus y emisión de eventos de llegada.
  
-* **NotificationService**
-  Envío de notificaciones mediante WhatsApp y consulta de estado de sesión.
- 
 * **PassengerService**
   Gestión de pasajeros y estados de viaje.
  
@@ -103,7 +99,6 @@ Cada microservicio utiliza su propia base de datos siguiendo buenas prácticas d
 | --------------------- | ------------- | ---------- |
 | AuthenticationService | urbus_users   | PostgreSQL |
 | LocationService       | UrBus         | MongoDB    |
-| NotificationService   | notifications | MongoDB    |
 | PassengerService      | passenger     | MongoDB    |
 | PostService           | urbus_posts   | MongoDB    |
  
@@ -117,7 +112,6 @@ Cada microservicio utiliza su propia base de datos siguiendo buenas prácticas d
 | --------------------- | ------ |
 | AuthenticationService | 5166   |
 | LocationService       | 3033   |
-| NotificationService   | 5000   |
 | PassengerService      | 3011   |
 | PostService           | 5001   |
  
@@ -205,40 +199,6 @@ http://localhost:3033/urbus/v1
  
 ---
  
-## NotificationService
- 
-Servicio encargado del envío de notificaciones mediante WhatsApp.
- 
-### Funcionalidades
- 
-* Generación de código QR de WhatsApp
-* Consulta del estado de sesión de WhatsApp
-* Envío de notificaciones de llegada, retraso y cambio de ruta
-* Envío de mensajes personalizados
-* Consulta de grupos de WhatsApp
- 
-### Endpoints
- 
-**Base URL:**
- 
-```
-http://localhost:5000/urbus/v1
-```
- 
-| Método | Endpoint                                 | Descripción                                      | Autenticación |
-| ------ | ---------------------------------------- | ------------------------------------------------ | -------------- |
-| GET    | /health                                  | Estado del servicio                              | No |
-| GET    | /notifications/whatsapp/status           | Estado de la sesión de WhatsApp                  | No |
-| GET    | /notifications/whatsapp/qr               | Obtener QR de WhatsApp                           | No |
-| POST   | /notifications/arrival                   | Notificar llegada                                | Sí (JWT) |
-| POST   | /notifications/delay                     | Notificar retraso                                | Sí (JWT) |
-| POST   | /notifications/route-change              | Cambio de ruta                                   | Sí (JWT) |
-| POST   | /notifications/custom                    | Mensaje personalizado                            | Sí (JWT) |
-| GET    | /notifications/groups                    | Obtener grupos de WhatsApp                       | Sí (JWT) |
-| GET    | /swagger                                 | Documentación de la API (Swagger UI)             | No |
- 
----
- 
 ## PassengerService
  
 Servicio encargado de la gestión de pasajeros.
@@ -310,7 +270,6 @@ UrBus/
 ├── authentication-service/
 ├── client-admin/
 ├── location-service/
-├── notification-service/
 ├── passenger-service/
 ├── post-service/
 ├── pg_db/
@@ -363,12 +322,6 @@ pnpm run dev
  
 ```bash
 cd ../location-service
-pnpm install
-pnpm run dev
-```
- 
-```bash
-cd ../notification-service
 pnpm install
 pnpm run dev
 ```

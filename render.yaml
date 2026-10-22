@@ -68,29 +68,6 @@ services:
         sync: false
 
   - type: web
-    name: urbus-notification-service
-    runtime: docker
-    dockerfilePath: ./dockerfiles/Dockerfile.notification-service
-    dockerContext: ./notification-service
-    plan: starter
-    healthCheckPath: /urbus/v1/health
-    disk:
-      name: whatsapp-session
-      mountPath: /app/.wwebjs_auth
-      sizeGB: 1
-    envVars:
-      - key: URI_MONGODB
-        sync: false
-      - key: JWT_SECRET
-        sync: false
-      - key: JWT_EXPIRES_IN
-        value: 1h
-      - key: JWT_ISSUER
-        value: UrBus
-      - key: JWT_AUDIENCE
-        value: UrBus
-
-  - type: web
     name: urbus-passenger-service
     runtime: docker
     dockerfilePath: ./dockerfiles/Dockerfile.passenger-service
@@ -148,6 +125,4 @@ services:
       - key: VITE_POST_URL
         sync: false
       - key: VITE_PASSENGER_URL
-        sync: false
-      - key: VITE_NOTIFICATION_URL
         sync: false

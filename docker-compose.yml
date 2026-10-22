@@ -99,29 +99,6 @@ services:
       - urbus_network
     restart: unless-stopped
 
-  notification-service:
-    build:
-      context: .
-      dockerfile: ./dockerfiles/Dockerfile.notification-service
-    container_name: urbus_notification_service
-    environment:
-      PORT: ${NOTIFICATION_PORT}
-      URI_MONGODB: mongodb://mongo:27017/notifications
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
-      JWT_ISSUER: ${JWT_ISSUER}
-      JWT_AUDIENCE: ${JWT_AUDIENCE}
-    volumes:
-      - ./notification-service:/app
-      - /app/node_modules
-    ports:
-      - "${NOTIFICATION_HOST_PORT}:${NOTIFICATION_PORT}"
-    depends_on:
-      - mongo
-    networks:
-      - urbus_network
-    restart: unless-stopped
-
   passenger-service:
     build:
       context: .
@@ -180,7 +157,6 @@ services:
         VITE_AUTH_URL: ${VITE_AUTH_URL}
         VITE_POST_URL: ${VITE_POST_URL}
         VITE_PASSENGER_URL: ${VITE_PASSENGER_URL}
-        VITE_NOTIFICATION_URL: ${VITE_NOTIFICATION_URL}
     container_name: urbus_client_admin
     environment:
       PORT: ${CLIENT_ADMIN_PORT}
@@ -188,7 +164,6 @@ services:
       VITE_AUTH_URL: ${VITE_AUTH_URL}
       VITE_POST_URL: ${VITE_POST_URL}
       VITE_PASSENGER_URL: ${VITE_PASSENGER_URL}
-      VITE_NOTIFICATION_URL: ${VITE_NOTIFICATION_URL}
     volumes:
       - ./client-admin:/app
       - /app/node_modules
@@ -197,7 +172,6 @@ services:
     depends_on:
       - authentication-service
       - location-service
-      - notification-service
       - passenger-service
       - post-service
     networks:
