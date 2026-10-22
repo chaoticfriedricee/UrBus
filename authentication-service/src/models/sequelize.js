@@ -12,7 +12,7 @@ const sequelize = new Sequelize(env.database.name, env.database.user, env.databa
   port: env.database.port,
   dialect: 'postgres',
   logging: env.database.logging ? (msg) => logger.debug(msg) : false,
-  dialectOptions: env.isProduction
+  dialectOptions: env.database.ssl
     ? { ssl: { require: true, rejectUnauthorized: false } }
     : {},
   pool: {

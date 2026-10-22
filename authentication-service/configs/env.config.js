@@ -32,6 +32,8 @@ const config = {
     user: process.env.DB_USER || 'UrBus',
     password: process.env.DB_PASSWORD || '',
     logging: toBool(process.env.DB_LOGGING, false),
+    // SSL activo por defecto en producción; DB_SSL=false para un Postgres local (Docker)
+    ssl: toBool(process.env.DB_SSL, process.env.NODE_ENV === 'production'),
   },
 
   jwt: {
