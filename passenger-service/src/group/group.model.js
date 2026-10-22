@@ -25,6 +25,12 @@ const groupSchema = new Schema(
     isActive: {
         type: Boolean,
         default: true
+    },
+
+    // Eliminado (soft delete): a diferencia de isActive=false, no se lista ni se puede reactivar
+    isDeleted: {
+        type: Boolean,
+        default: false
     }
 
 },

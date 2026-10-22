@@ -3,6 +3,9 @@ import GroupLimit from './groupLimit.model.js';
 import Passenger from '../passenger/passenger.model.js';
 import { generateUniqueCode } from './generateCode.js';
 
+// Los grupos creados antes de existir isDeleted no tienen el campo
+const NOT_DELETED = { isDeleted: { $ne: true } };
+
 export const createGroup = async (req, res, next) => {
   try {
 
@@ -63,7 +66,7 @@ export const getGroups = async (req, res, next) => {
       });
     }
 
-    const filter = req.user.role === 'DRIVER_ROLE' ? { driverId: req.user.id } : {};
+    const filter = req.user.role === 'DRIVER_ROLE' ? { driverId: req.user.id, ...NOT_DELETED } : NOT_DELETED;
     const groups = await Group.find(filter).sort({ createdAt: -1 });
 
     const data = await Promise.all(
@@ -94,7 +97,7 @@ export const getGroupById = async (req, res, next) => {
     }
 
     const { id } = req.params;
-    const group = await Group.findById(id);
+    const group = await Group.findOne({ _id: id, ...NOT_DELETED });
 
     if (!group) {
       return res.status(404).json({
@@ -126,7 +129,7 @@ export const updateGroup = async (req, res, next) => {
   try {
 
     const { id } = req.params;
-    const group = await Group.findById(id);
+    const group = await Group.findOne({ _id: id, ...NOT_DELETED });
 
     if (!group) {
       return res.status(404).json({
@@ -189,7 +192,7 @@ export const deleteGroup = async (req, res, next) => {
   try {
 
     const { id } = req.params;
-    const group = await Group.findById(id);
+    const group = await Group.findOne({ _id: id, ...NOT_DELETED });
 
     if (!group) {
       return res.status(404).json({
@@ -208,6 +211,7 @@ export const deleteGroup = async (req, res, next) => {
     }
 
     group.isActive = false;
+    group.isDeleted = true;
     await group.save();
 
     await Passenger.updateMany({ groupId: group._id }, { groupId: null });
