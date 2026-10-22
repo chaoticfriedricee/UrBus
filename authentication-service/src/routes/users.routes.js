@@ -3,7 +3,8 @@ const usersController = require('../controllers/users.controller');
 const authenticate = require('../../middlewares/authenticate');
 const authorize = require('../../middlewares/authorize');
 const validate = require('../../middlewares/validate');
-const { ADMIN_ROLE } = require('../utils/role-constants');
+const upload = require('../../configs/upload.configuration');
+const { ADMIN_ROLE, DRIVER_ROLE } = require('../utils/role-constants');
 const {
   updateUserRoleValidator,
   getProfileByIdValidator,
@@ -12,23 +13,43 @@ const {
 
 const router = express.Router();
 
-// Todas las rutas requieren estar autenticado y tener rol ADMIN_ROLE,
-// igual que [Authorize(Roles = "ADMIN_ROLE")] en UserManagmentController.cs
-router.use(authenticate, authorize(ADMIN_ROLE));
+// Todas las rutas requieren estar autenticado. La mayoría además requiere
+// ADMIN_ROLE, igual que [Authorize(Roles = "ADMIN_ROLE")] en UserManagmentController.cs
+router.use(authenticate);
+
+const adminOnly = authorize(ADMIN_ROLE);
 
 // GET /api/v1/users
-router.get('/', usersController.getAllUsers);
+router.get('/', adminOnly, usersController.getAllUsers);
 
 // PUT /api/v1/users/:userId/role?roleName=...
-router.put('/:userId/role', updateUserRoleValidator, validate, usersController.updateRole);
+router.put('/:userId/role', adminOnly, updateUserRoleValidator, validate, usersController.updateRole);
 
 // PUT /api/v1/users/:userId/verify-email
-router.put('/:userId/verify-email', getProfileByIdValidator, validate, usersController.verifyEmailByAdmin);
+router.put('/:userId/verify-email', adminOnly, getProfileByIdValidator, validate, usersController.verifyEmailByAdmin);
 
 // GET /api/v1/users/:userId/roles
-router.get('/:userId/roles', getProfileByIdValidator, validate, usersController.getUserRoles);
+router.get('/:userId/roles', adminOnly, getProfileByIdValidator, validate, usersController.getUserRoles);
 
 // GET /api/v1/users/by-role?roleName=...
-router.get('/by-role', getUsersByRoleValidator, validate, usersController.getUsersByRole);
+router.get('/by-role', adminOnly, getUsersByRoleValidator, validate, usersController.getUsersByRole);
+
+// PUT /api/v1/users/:userId/profile (multipart/form-data) — el propio usuario o un admin
+router.put(
+  '/:userId/profile',
+  upload.single('ProfilePicture'),
+  getProfileByIdValidator,
+  validate,
+  usersController.updateProfile,
+);
+
+// GET /api/v1/users/:userId — ADMIN o DRIVER (info de contacto de la cuenta de un pasajero)
+router.get(
+  '/:userId',
+  authorize(ADMIN_ROLE, DRIVER_ROLE),
+  getProfileByIdValidator,
+  validate,
+  usersController.getUserById,
+);
 
 module.exports = router;
