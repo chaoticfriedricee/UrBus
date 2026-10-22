@@ -3,7 +3,10 @@ import toast from 'react-hot-toast';
 import { useAuthStore } from '../../auth/store/authStore.js';
 import { styles } from '../../../styles/location.js';
 
-const LOCATION_SERVICE_URL = import.meta.env.VITE_LOCATION_SERVICE_URL || 'http://localhost:3000';
+const LOCATION_SERVICE_URL = import.meta.env.VITE_LOCATION_SERVICE_URL || 'http://localhost:3033/urbus/v1';
+// Socket.IO se sirve en la raíz del servicio (/socket.io/), no bajo /urbus/v1. Además,
+// io('http://host/urbus/v1') interpreta "/urbus/v1" como namespace y falla con "Invalid namespace".
+const SOCKET_URL = new URL(LOCATION_SERVICE_URL).origin;
 const CENTER_COORDS = { lat: 14.6245, lng: -90.5366 };
 
 export const LocationPage = () => {
@@ -71,7 +74,7 @@ export const LocationPage = () => {
         if (!document.getElementById('socketio-js')) {
           const script = document.createElement('script');
           script.id = 'socketio-js';
-          script.src = `${LOCATION_SERVICE_URL}/socket.io/socket.io.js`;
+          script.src = `${SOCKET_URL}/socket.io/socket.io.js`;
           script.onload = resolve;
           script.onerror = resolve; // continúa aunque falle, mostrará desconectado
           document.head.appendChild(script);
@@ -86,7 +89,7 @@ export const LocationPage = () => {
 
       // Conectar socket
       if (window.io) {
-        const socket = window.io(LOCATION_SERVICE_URL, { transports: ['websocket', 'polling'] });
+        const socket = window.io(SOCKET_URL, { transports: ['websocket', 'polling'] });
         socketRef.current = socket;
 
         socket.on('connect', () => { if (mounted) setConnected(true); });
