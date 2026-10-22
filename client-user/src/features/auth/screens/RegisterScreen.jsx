@@ -87,7 +87,7 @@ export default function RegisterScreen({ navigation }) {
         <View style={styles.divider} />
         <Field control={control} name="surname" placeholder="Apellido" rules={{ required: 'El apellido es obligatorio', maxLength: { value: 25, message: 'Máximo 25 caracteres' } }} />
         <View style={styles.divider} />
-        <Field control={control} name="username" placeholder="Usuario" autoCapitalize="none" rules={{ required: 'El usuario es obligatorio' }} />
+        <Field control={control} name="username" placeholder="Usuario" autoCapitalize="none" rules={{ required: 'El usuario es obligatorio', maxLength: { value: 25, message: 'Máximo 25 caracteres' } }} />
         <View style={styles.divider} />
         <Field
           control={control}
