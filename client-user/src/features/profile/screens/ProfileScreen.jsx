@@ -25,6 +25,13 @@ export default function ProfileScreen() {
     if (!isManager) fetchStatus();
   }, [isManager, fetchStatus]);
 
+  // El login solo trae id/username/foto/rol; email, nombre y teléfono vienen de /auth/me
+  useEffect(() => {
+    authClient.get('/auth/me')
+      .then(({ data }) => updateUser(data))
+      .catch(() => {});
+  }, [updateUser]);
+
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -72,6 +79,11 @@ export default function ProfileScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const startEdit = () => {
+    reset({ name: user?.name ?? '', surname: user?.surname ?? '', phone: user?.phone ?? '' });
+    setEditing(true);
   };
 
   const cancelEdit = () => {
@@ -165,7 +177,7 @@ export default function ProfileScreen() {
             <Button title="Guardar" onPress={handleSubmit(onSave)} loading={saving} style={styles.flexBtn} />
           </View>
         ) : (
-          <Button title="Editar Perfil" onPress={() => setEditing(true)} />
+          <Button title="Editar Perfil" onPress={startEdit} />
         )}
       </View>
 
