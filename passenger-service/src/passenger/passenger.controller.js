@@ -144,6 +144,48 @@ export const updatePassengerStatus = async (req, res, next) => {
   }
 };
 
+export const updatePassenger = async (req, res, next) => {
+  try {
+
+    if (req.user.role !== 'ADMIN_ROLE' && req.user.role !== 'DRIVER_ROLE') {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para editar pasajeros'
+      });
+    }
+
+    const { name } = req.body;
+
+    if (typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre es obligatorio'
+      });
+    }
+
+    const passenger = await Passenger.findOne({ _id: req.params.id, isActive: true });
+
+    if (!passenger) {
+      return res.status(404).json({
+        success: false,
+        message: 'Pasajero no encontrado'
+      });
+    }
+
+    passenger.name = name.trim();
+    await passenger.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Pasajero actualizado',
+      data: passenger
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
 const ABSENCE_REASONS = ['SALUD', 'EMERGENCIA', 'EXTRACURRICULAR', 'OTRO'];
 
 export const setAbsenceReason = async (req, res, next) => {

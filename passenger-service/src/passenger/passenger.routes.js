@@ -4,6 +4,7 @@ import {
   createPassenger,
   getPassengers,
   getMyPassenger,
+  updatePassenger,
   updatePassengerStatus,
   setAbsenceReason,
   clearAbsenceReason,
@@ -30,6 +31,12 @@ router.get(
   '/me',
   validateJWT,
   getMyPassenger
+);
+
+router.put(
+  '/:id',
+  validateJWT,
+  updatePassenger
 );
 
 router.patch(

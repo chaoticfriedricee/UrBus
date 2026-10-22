@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getPassengers, createPassenger, updatePassengerStatus, setAbsenceReason, clearAbsenceReason, deletePassenger } from '../../../shared/api/passenger.js';
+import { getPassengers, createPassenger, updatePassenger, updatePassengerStatus, setAbsenceReason, clearAbsenceReason, deletePassenger } from '../../../shared/api/passenger.js';
 import { showSuccess, showError } from '../../../shared/utils/toast.js';
 
 export const usePassengerStore = create((set, get) => ({
@@ -47,7 +47,10 @@ export const usePassengerStore = create((set, get) => ({
         }));
         try {
             set({ loading: true, error: null });
-            await updatePassengerStatus(id, payload);
+            const { data } = await updatePassenger(id, payload);
+            set((state) => ({
+                passengers: state.passengers.map((p) => (p._id === id ? data.data : p)),
+            }));
             showSuccess('Pasajero actualizado');
             return { success: true };
         } catch (err) {

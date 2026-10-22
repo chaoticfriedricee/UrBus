@@ -21,6 +21,10 @@ export const getPassengers = () =>
 export const createPassenger = (data) =>
     axiosPassenger.post('passengers', data);
 
+// PUT /api/v1/passengers/:id  — ADMIN o DRIVER (editar nombre)
+export const updatePassenger = (id, data) =>
+    axiosPassenger.put(`/passengers/${id}`, data);
+
 // PATCH /api/v1/passengers/:id/status  — ADMIN, DRIVER o propio PASSENGER
 export const updatePassengerStatus = (id, data) =>
     axiosPassenger.patch(`/passengers/${id}/status`, { status: data });

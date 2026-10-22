@@ -223,6 +223,7 @@ http://localhost:3011/urbus/v1/passengers
 | ------ | ----------- | ----------------- |
 | POST   | /           | Crear pasajero    |
 | GET    | /           | Listar pasajeros  |
+| PUT    | /:id        | Editar nombre     |
 | PATCH  | /:id/status | Actualizar estado |
 | DELETE | /:id        | Eliminar pasajero |
 | GET    | /swagger    | Documentación de la API (Swagger UI) |
