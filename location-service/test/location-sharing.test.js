@@ -23,9 +23,12 @@ let url;
 const sockets = [];
 
 const SILENCE_MS = 150;
+// Pausa corta para no esperar los 5 minutos reales tras una desconexión
+const GRACE_MS = 300;
 
 before(async () => {
     const created = createServer({
+        graceMs: GRACE_MS,
         getAccess: async (token) => {
             if (token === 'boom') throw new Error('passenger-service caído');
             return ACCESS[token] ?? null;
@@ -37,7 +40,10 @@ before(async () => {
     url = `http://127.0.0.1:${httpServer.address().port}`;
 });
 
-afterEach(() => {
+afterEach(async () => {
+    // Desconectarse solo pausa la ruta: se termina explícitamente para no arrastrarla a la siguiente prueba
+    for (const socket of sockets) if (socket.connected) socket.emit('stopSharing');
+    await wait(50);
     while (sockets.length) sockets.pop().disconnect();
 });
 
@@ -168,7 +174,7 @@ test('se ignoran coordenadas inválidas', async () => {
     assert.deepEqual(updates, []);
 });
 
-test('al dejar de compartir o desconectarse, el pasajero pasa a "no disponible"', async () => {
+test('al dejar de compartir, el pasajero pasa a "no disponible" de inmediato', async () => {
     const driver = await join('driver-a');
     driver.socket.emit('startSharing');
     driver.socket.emit('busLocation', { lat: 14.6, lng: -90.5 });
@@ -185,13 +191,97 @@ test('al dejar de compartir o desconectarse, el pasajero pasa a "no disponible"'
     await wait(SILENCE_MS);
     assert.deepEqual(updates, []);
 
-    driver.socket.emit('startSharing');
-    await once(passenger.socket, 'locationStatus');
+    const rejoined = await join('pass-a2');
+    assert.deepEqual(rejoined.status, { sharing: false });
+});
 
-    const disconnected = once(passenger.socket, 'locationStatus');
+test('al perder la conexión la ruta queda en pausa y termina sola si el conductor no vuelve', async () => {
+    const driver = await join('driver-a');
+    driver.socket.emit('startSharing');
+    driver.socket.emit('busLocation', { lat: 14.6, lng: -90.5 });
+    const passenger = await join('pass-a');
+    const otherGroup = await join('pass-b');
+    const leaks = record(otherGroup.socket, 'locationStatus');
+
+    const paused = once(passenger.socket, 'locationStatus');
     driver.socket.disconnect();
-    assert.deepEqual(await disconnected, { sharing: false });
+    const status = await paused;
+    // Se muestra como última posición conocida, nunca como ubicación en vivo
+    assert.equal(status.sharing, true);
+    assert.equal(status.paused, true);
+    assert.equal(status.lat, 14.6);
+    assert.ok(Number.isFinite(status.ageMs) && status.ageMs >= 0);
+
+    const ended = once(passenger.socket, 'locationStatus', GRACE_MS * 3);
+    assert.deepEqual(await ended, { sharing: false });
 
     const rejoined = await join('pass-a2');
     assert.deepEqual(rejoined.status, { sharing: false });
+    assert.deepEqual(leaks, []);
+});
+
+test('si el conductor vuelve a tiempo, la ruta continúa sin perder la última posición', async () => {
+    const first = await join('driver-a');
+    first.socket.emit('startSharing');
+    first.socket.emit('busLocation', { lat: 14.61, lng: -90.51, timestamp: 1000 });
+    const passenger = await join('pass-a');
+
+    const paused = once(passenger.socket, 'locationStatus');
+    first.socket.disconnect();
+    assert.equal((await paused).paused, true);
+
+    // Al reconectarse el servidor le avisa al conductor que su ruta sigue en pausa
+    const again = await join('driver-a');
+    assert.equal(again.status.sharing, true);
+    assert.equal(again.status.paused, true);
+
+    const resumed = once(passenger.socket, 'locationStatus');
+    again.socket.emit('startSharing');
+    const status = await resumed;
+    assert.equal(status.sharing, true);
+    assert.equal(status.paused, undefined);
+    assert.equal(status.lat, 14.61);
+
+    // Pasado el tiempo de gracia la ruta reanudada no se cancela
+    const statuses = record(passenger.socket, 'locationStatus');
+    await wait(GRACE_MS + SILENCE_MS);
+    assert.deepEqual(statuses, []);
+
+    const update = once(passenger.socket, 'updateBus');
+    again.socket.emit('busLocation', { lat: 14.62, lng: -90.52, timestamp: 2000 });
+    assert.equal((await update).lat, 14.62);
+});
+
+test('se descartan posiciones repetidas o más viejas que la última', async () => {
+    const driver = await join('driver-a');
+    driver.socket.emit('startSharing');
+    const passenger = await join('pass-a');
+    const updates = record(passenger.socket, 'updateBus');
+
+    driver.socket.emit('busLocation', { lat: 14.1, lng: -90.1, timestamp: 2000 });
+    driver.socket.emit('busLocation', { lat: 14.2, lng: -90.2, timestamp: 1000 });
+    driver.socket.emit('busLocation', { lat: 14.3, lng: -90.3, timestamp: 2000 });
+    driver.socket.emit('busLocation', { lat: 14.4, lng: -90.4, timestamp: 3000 });
+    await wait(SILENCE_MS);
+
+    assert.deepEqual(updates.map((u) => u.lat), [14.1, 14.4]);
+
+    // Una ruta nueva no arrastra el orden de la anterior (otro dispositivo, otro reloj)
+    driver.socket.emit('stopSharing');
+    driver.socket.emit('startSharing');
+    driver.socket.emit('busLocation', { lat: 14.5, lng: -90.5, timestamp: 10 });
+    await wait(SILENCE_MS);
+    assert.deepEqual(updates.map((u) => u.lat), [14.1, 14.4, 14.5]);
+});
+
+test('el estado inicial incluye la antigüedad de la última posición', async () => {
+    const driver = await join('driver-a');
+    driver.socket.emit('startSharing');
+    driver.socket.emit('busLocation', { lat: 14.6, lng: -90.5 });
+    await wait(SILENCE_MS);
+
+    const passenger = await join('pass-a');
+    assert.ok(passenger.status.ageMs >= SILENCE_MS - 50);
+    assert.ok(Number.isFinite(Date.parse(passenger.status.updatedAt)));
+    driver.socket.emit('stopSharing');
 });

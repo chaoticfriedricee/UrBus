@@ -13,7 +13,8 @@
     "ios": "expo start --ios",
     "ios:build": "expo run:ios",
     "web": "expo start --web",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

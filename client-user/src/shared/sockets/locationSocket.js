@@ -9,8 +9,9 @@ let socket = null;
  * Conecta al namespace raíz de location-service, autenticado con el token.
  * location-service solo entrega la ubicación del conductor a él mismo y a los
  * pasajeros de sus grupos activos:
- * - Todos escuchan "locationStatus" ({ sharing, lat?, lng?, reason? }),
- *   "updateBus" y "busArrived".
+ * - Todos escuchan "locationStatus" ({ sharing, paused?, lat?, lng?, updatedAt?, ageMs?, reason? }),
+ *   "updateBus" y "busArrived". paused: el conductor perdió la conexión y lo que
+ *   llega es solo su última posición conocida.
  * - Solo el conductor (DRIVER_ROLE) emite "startSharing" / "busLocation" /
  *   "stopSharing" para compartir su GPS mientras tiene la ruta iniciada.
  */
@@ -39,8 +40,19 @@ export function onConnectionChange(onConnect, onDisconnect, onError) {
   socket?.on('disconnect', onDisconnect);
   if (onError) socket?.on('connect_error', onError);
 }
+/**
+ * Reconecta si el socket quedó detenido (p. ej. el servidor rechazó el token). No hace nada
+ * si ya está conectado o si Socket.IO ya está reintentando: nunca abre una segunda conexión.
+ */
 export function reconnectLocationSocket() {
-  socket?.connect();
+  if (socket && !socket.connected && !socket.active) socket.connect();
+}
+export function isLocationSocketConnected() {
+  return Boolean(socket?.connected);
+}
+/** true mientras Socket.IO reintenta por su cuenta (cortes de red); false si el servidor lo rechazó. */
+export function isLocationSocketActive() {
+  return Boolean(socket?.active);
 }
 /** El conductor empieza a compartir su ubicación con sus grupos. */
 export function emitStartSharing() {
@@ -50,9 +62,12 @@ export function emitStartSharing() {
 export function emitStopSharing() {
   socket?.emit('stopSharing');
 }
-/** Emite la posición GPS del bus. Uso exclusivo del conductor. */
+/**
+ * Emite la posición GPS del bus ({ lat, lng, timestamp }). Uso exclusivo del conductor.
+ * volatile: sin conexión se descarta en vez de acumularse y llegar tarde y en ráfaga.
+ */
 export function emitBusLocation(coords) {
-  socket?.emit('busLocation', coords);
+  socket?.volatile.emit('busLocation', coords);
 }
 export function disconnectLocationSocket() {
   if (socket) {

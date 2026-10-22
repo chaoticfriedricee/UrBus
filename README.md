@@ -198,13 +198,27 @@ Servicio encargado de la ubicación en tiempo real del bus.
 ### Funcionalidades
  
 * Seguimiento de ubicación con Socket.IO, autenticado con el access token (`io(url, { auth: { token } })`)
-* El conductor comparte su ubicación solo cuando lo decide (`startSharing` / `stopSharing`; se detiene también al desconectarse)
+* El conductor comparte su ubicación solo cuando lo decide (`startSharing` / `stopSharing`)
+* Si el conductor pierde la conexión sin finalizar la ruta, esta queda en pausa (`paused: true`, solo la última posición conocida) durante `LOCATION_SHARING_GRACE_MS` (5 min por defecto) y termina sola si no vuelve
+* Las posiciones llevan el `timestamp` del GPS: se descartan las repetidas o más viejas que la última
 * La ubicación solo llega al conductor y a los pasajeros de sus grupos activos (`locationStatus`, `updateBus`, `busArrived`)
 * Solo se guarda en memoria la última posición de quien comparte; no hay historial
 * Detección de llegada a Kinal por conductor y emisión del evento `busArrived`
 * Vista pública en `/urbus/v1/` (sin sesión: muestra el mapa pero no transmite ni recibe ubicaciones)
 
 Requiere `PASSENGER_SERVICE_URL` (por defecto `http://localhost:3011/urbus/v1`) para validar a qué conductor puede seguir cada usuario.
+
+### Ubicación con la app en segundo plano
+
+El conductor comparte desde el navegador (`client-admin`) o desde la app Expo (`client-user`), y en ambos casos **solo mientras UrBus está en pantalla**:
+
+* Al cambiar a otra app (p. ej. WhatsApp) o bloquear la pantalla, el navegador o el sistema dejan de entregar el GPS y suspenden la página/app; después se corta la conexión y el servidor pone la ruta en pausa. Ningún código web puede evitarlo, y un service worker tampoco tiene acceso al GPS.
+* Al volver, se reconecta solo (renovando el token si venció), reanuda la ruta y pide una posición nueva, sin pulsar "Iniciar Ruta" otra vez. Si el permiso de ubicación se retiró, deja de compartir y lo avisa.
+* Si la página se recargó o la app se reinició, el conductor ve "Tu ruta quedó en pausa" y decide si reanudarla o finalizarla.
+* En el navegador se pide un *wake lock* de pantalla mientras la ruta está activa, para que el bloqueo automático no la suspenda (no impide bloquearla a mano).
+* Los pasajeros ven la antigüedad de la posición: "En vivo", "Ubicación no actualizada · última hace X min" (más de 45 s sin posiciones) o "Conexión con el conductor perdida"; el marcador se atenúa cuando no es en vivo.
+
+Seguir enviando la ubicación con la app en segundo plano requiere una app nativa con seguimiento en segundo plano (servicio en primer plano con notificación en Android, modo `location` en iOS), que aún no está implementada.
  
 ### Endpoints
  
@@ -424,6 +438,8 @@ cd authentication-service && pnpm test   # necesita PostgreSQL (crea y borra urb
 cd passenger-service && pnpm test        # necesita MongoDB (usa urbus_passenger_test)
 cd post-service && pnpm test             # necesita MongoDB (usa urbus_posts_test)
 cd location-service && pnpm test         # sin base de datos
+cd client-admin && pnpm test             # ciclo de vida de la ubicación compartida en el navegador
+cd client-user && pnpm test              # antigüedad de la ubicación en la app móvil
 ```
 
 Con `docker compose` levantado, PostgreSQL y MongoDB ya están disponibles en los puertos por defecto. `TEST_DB_NAME` y `TEST_URI_MONGODB` permiten cambiar las bases de prueba.

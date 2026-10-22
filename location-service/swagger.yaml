@@ -47,32 +47,46 @@ info:
 
     **`startSharing`** — el conductor empieza a compartir su ubicación.
 
-    **`stopSharing`** — deja de compartirla. También se detiene al desconectarse.
+    **`stopSharing`** — deja de compartirla (de inmediato).
+
+    Si el conductor se desconecta sin `stopSharing` (app en segundo plano, pantalla
+    bloqueada, cambio de red), la ruta queda **en pausa** durante
+    `LOCATION_SHARING_GRACE_MS` (5 minutos por defecto): los pasajeros reciben
+    `locationStatus` con `paused: true` y la última posición conocida. Si el conductor
+    se reconecta y vuelve a emitir `startSharing`, la ruta continúa; si no, termina sola.
 
     **`busLocation`**
     Envía la ubicación GPS actual del bus al servidor. Se ignora si el conductor
     no emitió antes `startSharing`, o si la emite un pasajero.
 
     ```javascript
-    socket.emit("busLocation", {
+    socket.volatile.emit("busLocation", {
       lat: 14.6258,
-      lng: -90.5366
+      lng: -90.5366,
+      timestamp: position.timestamp
     });
     ```
 
-    | Campo | Tipo   | Descripción                |
-    |-------|--------|----------------------------|
-    | lat   | number | Latitud GPS del bus         |
-    | lng   | number | Longitud GPS del bus        |
+    | Campo     | Tipo   | Descripción |
+    |-----------|--------|-------------|
+    | lat       | number | Latitud GPS del bus |
+    | lng       | number | Longitud GPS del bus |
+    | timestamp | number | Opcional. Momento (ms, reloj del conductor) en que el GPS tomó la posición. Se descartan posiciones con un `timestamp` igual o anterior al último recibido en la ruta, para no mover el bus hacia atrás con posiciones repetidas o reenviadas. |
+
+    Se recomienda `volatile` para no acumular posiciones mientras no hay conexión.
 
     ---
 
     ### Eventos emitidos por el servidor (solo a la sala del conductor)
 
     **`locationStatus`**
-    Se envía al conectar y cada vez que el conductor empieza o deja de compartir:
-    `{ sharing: boolean, lat?, lng?, updatedAt?, reason? }`. `reason: "NO_GROUP"`
-    indica que el usuario no pertenece a ningún grupo activo (o es admin).
+    Se envía al conectar y cada vez que el conductor empieza, pausa o deja de compartir:
+    `{ sharing: boolean, paused?, lat?, lng?, updatedAt?, ageMs?, reason? }`.
+    - `reason: "NO_GROUP"`: el usuario no pertenece a ningún grupo activo (o es admin).
+    - `paused: true`: el conductor perdió la conexión; `lat`/`lng` son solo la última
+      posición conocida y no deben mostrarse como ubicación en vivo.
+    - `ageMs`: antigüedad de esa posición al enviarse el evento (no depende de que el
+      reloj del dispositivo coincida con el del servidor).
 
     **`updateBus`**
     Se emite a la sala del conductor cada vez que envía una nueva ubicación.
