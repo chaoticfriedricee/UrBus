@@ -4,6 +4,7 @@ import { ProtectedRoute } from './ProtecterRoute.jsx';
 import { RoleGuard } from './RoleGuard.jsx';
 import { AuthPage } from '../../features/auth/pages/AuthPage.jsx';
 import { VerifyEmailPage } from '../../features/auth/pages/VerifyEmailPage.jsx';
+import { ResetPasswordPage } from '../../features/auth/pages/ResetPasswordPage.jsx';
 import { LocationPage } from '../../features/location/pages/LocationPage.jsx';
 import { PassengerListPage } from '../../features/passangers/pages/PassengerListPage.jsx';
 import { GroupListPage } from '../../features/groups/pages/GroupListPage.jsx';
@@ -19,7 +20,7 @@ export const AppRouter = () => {
       <Route path='/auth/register' element={<AuthPage />} />
 
       <Route path='/verify-email' element={<VerifyEmailPage />} />
-      {/* <Route path='/reset-password' element={<ResetPasswordPage />} /> */}
+      <Route path='/reset-password' element={<ResetPasswordPage />} />
 
       <Route
         path='/dashboard'
