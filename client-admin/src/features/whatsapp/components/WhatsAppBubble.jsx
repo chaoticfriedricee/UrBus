@@ -60,6 +60,13 @@ const Spinner = () => (
 export const WhatsAppBubble = () => {
   const user = useAuthStore((state) => state.user);
 
+  // Administradores y conductores pueden usar WhatsApp desde el panel
+  if (!['ADMIN_ROLE', 'DRIVER_ROLE'].includes(user?.role)) return null;
+
+  return <WhatsAppPanel />;
+};
+
+const WhatsAppPanel = () => {
   const [open, setOpen] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [qrImage, setQrImage] = useState(null);
@@ -81,9 +88,6 @@ export const WhatsAppBubble = () => {
   const [recipientType, setRecipientType] = useState('manual');
 
   const panelRef = useRef(null);
-
-  // Administradores y conductores pueden usar WhatsApp desde el panel
-  if (!['ADMIN_ROLE', 'DRIVER_ROLE'].includes(user?.role)) return null;
 
   const showFeedback = (msg, ok = true) => {
     setFeedback({ msg, ok });
