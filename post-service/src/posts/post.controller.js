@@ -9,6 +9,10 @@ const getRole = (req) => {
 const isAdmin = (req) => getRole(req) === 'ADMIN_ROLE';
 const isDriver = (req) => getRole(req) === 'DRIVER_ROLE';
 
+// Solo un admin o el conductor que creó el post pueden modificarlo
+const canModify = (req, post) =>
+    isAdmin(req) || (isDriver(req) && post.createdBy === req.user.id);
+
 export const createPost = async (req, res) => {
     try {
 
@@ -135,9 +139,7 @@ export const updatePost = async (req, res) => {
             });
         }
 
-        const role = getRole(req);
-
-        if (isDriver(req) && post.createdBy !== req.user.id) {
+        if (!canModify(req, post)) {
             return res.status(403).json({
                 message: 'Solo puedes editar tus propios posts'
             });
@@ -187,9 +189,7 @@ export const deletePost = async (req, res) => {
             });
         }
 
-        const role = getRole(req);
-
-        if (isDriver(req) && post.createdBy !== req.user.id) {
+        if (!canModify(req, post)) {
             return res.status(403).json({
                 message: 'Solo puedes eliminar tus propios posts'
             });
