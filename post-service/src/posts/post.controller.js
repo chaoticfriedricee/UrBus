@@ -9,6 +9,22 @@ const getRole = (req) => {
 const isAdmin = (req) => getRole(req) === 'ADMIN_ROLE';
 const isDriver = (req) => getRole(req) === 'DRIVER_ROLE';
 
+// Errores de datos del cliente (validación, ID mal formado) -> 400, el resto -> 500
+const sendError = (res, err, message) => {
+    if (err.name === 'ValidationError' || err.name === 'CastError') {
+        return res.status(400).json({
+            message: err.name === 'CastError' ? 'ID de post inválido' : message,
+            error: err.message
+        });
+    }
+
+    console.error(err);
+    return res.status(500).json({
+        message,
+        error: err.message
+    });
+};
+
 // Solo un admin o el conductor que creó el post pueden modificarlo
 const canModify = (req, post) =>
     isAdmin(req) || (isDriver(req) && post.createdBy === req.user.id);
@@ -46,10 +62,7 @@ export const createPost = async (req, res) => {
         });
 
     } catch (err) {
-        res.status(500).json({
-            message: 'Error creando post',
-            error: err.message
-        });
+        sendError(res, err, 'Error creando post');
     }
 };
 
@@ -71,11 +84,7 @@ export const getPosts = async (req, res) => {
         res.json(posts);
 
     } catch (err) {
-        console.error(err);
-        res.status(500).json({
-            message: 'Error obteniendo posts',
-            error: err.message
-        });
+        sendError(res, err, 'Error obteniendo posts');
     }
 };
 
@@ -89,10 +98,7 @@ export const getMyPosts = async (req, res) => {
         res.json(posts);
 
     } catch (err) {
-        res.status(500).json({
-            message: 'Error obteniendo tus posts',
-            error: err.message
-        });
+        sendError(res, err, 'Error obteniendo tus posts');
     }
 };
 
@@ -121,10 +127,7 @@ export const getPostById = async (req, res) => {
         res.json(post);
 
     } catch (err) {
-        res.status(500).json({
-            message: 'Error obteniendo post',
-            error: err.message
-        });
+        sendError(res, err, 'Error obteniendo post');
     }
 };
 
@@ -171,10 +174,7 @@ export const updatePost = async (req, res) => {
         });
 
     } catch (err) {
-        res.status(500).json({
-            message: 'Error actualizando post',
-            error: err.message
-        });
+        sendError(res, err, 'Error actualizando post');
     }
 };
 
@@ -204,10 +204,7 @@ export const deletePost = async (req, res) => {
         });
 
     } catch (err) {
-        res.status(500).json({
-            message: 'Error eliminando post',
-            error: err.message
-        });
+        sendError(res, err, 'Error eliminando post');
     }
 };
 
@@ -226,15 +223,18 @@ export const reactivatePost = async (req, res) => {
             { new: true }
         );
 
+        if (!post) {
+            return res.status(404).json({
+                message: 'Post no encontrado'
+            });
+        }
+
         res.json({
             message: 'Post reactivado',
             post
         });
 
     } catch (err) {
-        res.status(500).json({
-            message: 'Error reactivando post',
-            error: err.message
-        });
+        sendError(res, err, 'Error reactivando post');
     }
 };

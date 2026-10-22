@@ -58,6 +58,16 @@ export const initServer = async () => {
             });
         });
 
+        // Errores lanzados por middlewares (p. ej. multer al subir la imagen)
+        app.use((err, req, res, next) => {
+            const status = err.name === 'MulterError' ? 400 : (err.statusCode || 500);
+            if (status === 500) console.error(err);
+            res.status(status).json({
+                success: false,
+                message: status === 500 ? 'Error interno del servidor' : err.message
+            });
+        });
+
         app.listen(PORT, () => {
             console.log(`Post Service ejecutándose en puerto: ${PORT}`);
             console.log(`Health: http://localhost:${PORT}${BASE_PATH}/health`);
