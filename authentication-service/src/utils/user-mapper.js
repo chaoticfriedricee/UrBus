@@ -18,6 +18,7 @@ function toUserResponseDto(user, roleNameOverride) {
     profilePicture: cloudinaryService.getFullImageUrl(user.userProfile?.profilePicture || ''),
     phone: user.userProfile?.phone || '',
     role: roleNameOverride || getPrimaryRoleName(user),
+    passengerType: user.passengerType,
     status: user.status,
     isEmailVerified: user.userEmail?.emailVerified || false,
     createdAt: user.createdAt,

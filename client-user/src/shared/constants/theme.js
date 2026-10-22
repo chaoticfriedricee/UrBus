@@ -57,6 +57,12 @@ export const ROLE_LABELS = {
   ADMIN_ROLE: 'Administrador',
 };
 
+// Tipo de pasajero (independiente del rol). Solo un administrador puede cambiarlo.
+export const PASSENGER_TYPE_LABELS = {
+  FIXED_PASSENGER: 'Pasajero fijo',
+  OCCASIONAL_PASSENGER: 'Pasajero eventual',
+};
+
 // Roles que pueden gestionar pasajeros y anuncios (funciones antes exclusivas de client-admin)
 export const MANAGER_ROLES = [ROLES.DRIVER, ROLES.ADMIN];
 

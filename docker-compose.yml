@@ -88,6 +88,8 @@ services:
     environment:
       PORT: ${LOCATION_PORT}
       URI_MONGODB: mongodb://mongo:27017/UrBus
+      # Autoriza quién puede ver la ubicación de cada conductor
+      PASSENGER_SERVICE_URL: http://passenger-service:${PASSENGER_PORT}/urbus/v1
     volumes:
       - ./location-service:/app
       - /app/node_modules
@@ -95,6 +97,7 @@ services:
       - "${LOCATION_PORT}:${LOCATION_PORT}"
     depends_on:
       - mongo
+      - passenger-service
     networks:
       - urbus_network
     restart: unless-stopped
@@ -137,6 +140,8 @@ services:
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      # Autoriza qué avisos de grupo puede ver o publicar cada usuario
+      PASSENGER_SERVICE_URL: http://passenger-service:${PASSENGER_PORT}/urbus/v1
     volumes:
       - ./post-service:/app
       - /app/node_modules
@@ -144,6 +149,7 @@ services:
       - "${POST_PORT}:${POST_PORT}"
     depends_on:
       - mongo
+      - passenger-service
     networks:
       - urbus_network
     restart: unless-stopped

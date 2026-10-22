@@ -20,6 +20,13 @@ const updateRole = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
+// PUT /api/v1/users/:userId/passenger-type  { passengerType }
+const updatePassengerType = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  const result = await userManagementService.updatePassengerTypeAsync(userId, req.body.passengerType);
+  res.status(200).json(result);
+});
+
 // GET /api/v1/users/:userId/roles
 const getUserRoles = asyncHandler(async (req, res) => {
   const { userId } = req.params;
@@ -56,6 +63,7 @@ const updateProfile = asyncHandler(async (req, res) => {
 module.exports = {
   getAllUsers,
   updateRole,
+  updatePassengerType,
   getUserRoles,
   getUsersByRole,
   verifyEmailByAdmin,

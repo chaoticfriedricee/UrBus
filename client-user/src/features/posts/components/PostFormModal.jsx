@@ -9,12 +9,14 @@ import Input from '../../../shared/components/common/Input';
 import Button from '../../../shared/components/common/Button';
 import { COLORS, SPACING, FONT_SIZE, RADIUS } from '../../../shared/constants/theme';
 
-export default function PostFormModal({ visible, post, loading, onClose, onSubmit }) {
+export default function PostFormModal({ visible, post, groups = [], loading, onClose, onSubmit }) {
   const isEdit = Boolean(post);
   const [title, setTitle] = useState(post?.title ?? '');
   const [content, setContent] = useState(post?.content ?? '');
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState(post?.image ?? null);
+  // '' = aviso general; si no, id del grupo destinatario
+  const [groupId, setGroupId] = useState(post?.groupId ?? '');
 
   useEffect(() => {
     if (visible) {
@@ -22,6 +24,7 @@ export default function PostFormModal({ visible, post, loading, onClose, onSubmi
       setContent(post?.content ?? '');
       setImage(null);
       setPreview(post?.image ?? null);
+      setGroupId(post?.groupId ?? '');
     }
   }, [visible, post]);
 
@@ -44,6 +47,8 @@ export default function PostFormModal({ visible, post, loading, onClose, onSubmi
     const formData = new FormData();
     formData.append('title', title.trim());
     formData.append('content', content.trim());
+    // Al editar solo se envía si cambió (post-service vuelve a validar que el grupo sea tuyo)
+    if (groupId !== (post?.groupId ?? '')) formData.append('groupId', groupId);
     if (image) formData.append('image', image);
     onSubmit(formData);
   };
@@ -70,6 +75,23 @@ export default function PostFormModal({ visible, post, loading, onClose, onSubmi
             multiline
             numberOfLines={3}
           />
+
+          {groups.length > 0 || groupId ? (
+            <>
+              <Text style={styles.label}>Dirigido a</Text>
+              <View style={styles.chips}>
+                {[{ _id: '', name: 'Todos (general)' }, ...groups].map((g) => (
+                  <TouchableOpacity
+                    key={g._id || 'general'}
+                    style={[styles.chip, groupId === g._id && styles.chipActive]}
+                    onPress={() => setGroupId(g._id)}
+                  >
+                    <Text style={[styles.chipText, groupId === g._id && styles.chipTextActive]}>{g.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          ) : null}
 
           <Text style={styles.label}>Imagen (opcional)</Text>
           {preview ? (
@@ -108,5 +130,10 @@ const styles = StyleSheet.create({
   uploadBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed', borderRadius: RADIUS.md, paddingVertical: 12, paddingHorizontal: 16, marginBottom: SPACING.md, alignSelf: 'flex-start' },
   uploadText: { color: COLORS.textLight, fontWeight: '600', fontSize: FONT_SIZE.sm },
   row: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs, marginBottom: SPACING.md },
+  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.pill, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  chipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  chipText: { fontSize: FONT_SIZE.xs, fontWeight: '600', color: COLORS.text },
+  chipTextActive: { color: '#fff' },
   flexBtn: { flex: 1 },
 });

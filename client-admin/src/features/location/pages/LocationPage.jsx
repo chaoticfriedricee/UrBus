@@ -9,9 +9,12 @@ const LOCATION_SERVICE_URL = import.meta.env.VITE_LOCATION_SERVICE_URL || 'http:
 const SOCKET_URL = new URL(LOCATION_SERVICE_URL).origin;
 const CENTER_COORDS = { lat: 14.6245, lng: -90.5366 };
 
+// location-service solo entrega la ubicación de un conductor a él mismo y a los
+// pasajeros de sus grupos activos, y solo mientras el conductor la comparte
+// ("Iniciar Ruta"). Solo DRIVER_ROLE puede compartir su ubicación.
 export const LocationPage = () => {
   const user = useAuthStore((state) => state.user);
-  const canManageRoute = user?.role === 'ADMIN_ROLE' || user?.role === 'DRIVER_ROLE';
+  const canManageRoute = user?.role === 'DRIVER_ROLE';
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -19,10 +22,13 @@ export const LocationPage = () => {
   const socketRef = useRef(null);
   const watchIdRef = useRef(null);
   const hasArrivedRef = useRef(false);
+  const routeActiveRef = useRef(false);
 
   const [routeActive, setRouteActive] = useState(false);
   const [busStatus, setBusStatus] = useState('Esperando...');
   const [connected, setConnected] = useState(false);
+  // null = sin respuesta aún; { sharing, reason? } según location-service
+  const [locationStatus, setLocationStatus] = useState(null);
 
   // Inicializar mapa
   const initMap = useCallback((L) => {
@@ -87,13 +93,40 @@ export const LocationPage = () => {
 
       initMap(window.L);
 
-      // Conectar socket
+      // Conectar socket (autenticado: la función entrega el token vigente en cada reconexión)
       if (window.io) {
-        const socket = window.io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+        const socket = window.io(SOCKET_URL, {
+          transports: ['websocket', 'polling'],
+          auth: (cb) => cb({ token: useAuthStore.getState().token }),
+        });
         socketRef.current = socket;
 
-        socket.on('connect', () => { if (mounted) setConnected(true); });
+        socket.on('connect', () => {
+          if (!mounted) return;
+          setConnected(true);
+          // Tras una reconexión el servidor ya no recuerda que el conductor compartía
+          if (routeActiveRef.current) socket.emit('startSharing');
+        });
         socket.on('disconnect', () => { if (mounted) setConnected(false); });
+
+        // Un rechazo del middleware (p. ej. token vencido) no se reintenta solo
+        socket.on('connect_error', () => {
+          if (!mounted) return;
+          setConnected(false);
+          setTimeout(() => { if (mounted && !socket.connected) socket.connect(); }, 5000);
+        });
+
+        socket.on('locationStatus', (status) => {
+          if (!mounted) return;
+          setLocationStatus(status);
+          if (!status?.sharing) {
+            // Sin ubicación compartida: no se deja un marcador que aparente una posición en vivo
+            busMarkerRef.current?.remove();
+            busMarkerRef.current = null;
+            hasArrivedRef.current = false;
+            setBusStatus('Ubicación no compartida');
+          }
+        });
 
         socket.on('updateBus', (coords) => {
           if (!mounted) return;
@@ -102,6 +135,7 @@ export const LocationPage = () => {
           if (!L || !map) return;
 
           setBusStatus('En ruta 🚌');
+          setLocationStatus({ sharing: true });
 
           const busIcon = L.divIcon({
             html: `<div style="font-size:32px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">🚌</div>`,
@@ -170,8 +204,10 @@ export const LocationPage = () => {
       return;
     }
     hasArrivedRef.current = false;
+    routeActiveRef.current = true;
     setRouteActive(true);
     setBusStatus('En ruta 🚌');
+    socketRef.current.emit('startSharing');
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
@@ -188,6 +224,8 @@ export const LocationPage = () => {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
+    routeActiveRef.current = false;
+    socketRef.current?.emit('stopSharing');
     setRouteActive(false);
     setBusStatus('Ruta finalizada');
     hasArrivedRef.current = false;
@@ -195,8 +233,20 @@ export const LocationPage = () => {
 
   const statusColor = connected ? '#16a34a' : '#9ca3af';
   const statusLabel = connected
-    ? (routeActive ? busStatus : 'Conectado')
+    ? (routeActive || locationStatus?.sharing ? busStatus : 'Conectado')
     : 'Desconectado';
+
+  // Aviso sobre el mapa para quien solo observa
+  let viewerNotice = null;
+  if (!canManageRoute && connected && locationStatus) {
+    if (locationStatus.reason === 'NO_GROUP') {
+      viewerNotice = user?.role === 'ADMIN_ROLE'
+        ? 'La ubicación del bus solo la ven el conductor y los pasajeros de su grupo.'
+        : 'Únete a un grupo con el código de tu conductor para ver la ubicación del bus.';
+    } else if (!locationStatus.sharing) {
+      viewerNotice = 'Tu conductor no está compartiendo su ubicación en este momento.';
+    }
+  }
 
   return (
     <div style={styles.wrapper}>
@@ -213,7 +263,9 @@ export const LocationPage = () => {
             <h1 style={styles.pageTitle}>Mapa a Tiempo Real</h1>
             <p style={styles.pageSubtitle}>
               {canManageRoute
-                ? 'Gestiona y monitorea la ruta del bus'
+                ? (routeActive
+                    ? 'Compartiendo tu ubicación con los pasajeros de tus grupos'
+                    : 'Inicia la ruta para compartir tu ubicación con tus grupos')
                 : 'Sigue la ubicación del bus en tiempo real'}
             </p>
           </div>
@@ -235,6 +287,15 @@ export const LocationPage = () => {
             <span style={styles.mapCardHeaderText}>Actualización en tiempo real</span>
           </div>
         </div>
+
+        {viewerNotice && (
+          <div style={{
+            padding: '10px 16px', background: '#fffbeb', color: '#92400e',
+            fontSize: 13, fontWeight: 600, borderBottom: '1px solid #fde68a',
+          }}>
+            {viewerNotice}
+          </div>
+        )}
 
         <div ref={mapRef} style={styles.mapContainer} />
 

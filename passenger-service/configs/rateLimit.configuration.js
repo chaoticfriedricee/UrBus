@@ -4,6 +4,9 @@ export const requestLimit = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
     standardHeaders: true,
+    // post-service y location-service consultan este endpoint en cada petición/conexión
+    // desde una misma IP; sin esta excepción agotarían el límite de todos sus usuarios
+    skip: (req) => req.path === '/urbus/v1/groups/access',
     handler: (req, res) => {
         console.log(`Peticiones excedidas desde IP: ${req.ip}, Endpoint: ${req.path}`)
         res.status(429).json({

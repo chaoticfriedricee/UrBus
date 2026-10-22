@@ -1,8 +1,9 @@
 // src/features/bus/screens/BusTrackingScreen.jsx
 // Pantalla "Mapa a Tiempo Real" — replica el mockup: encabezado azul con título
-// e iconos, mapa de fondo claro y marcador del bus. Para DRIVER_ROLE/ADMIN_ROLE
-// agrega los controles "Iniciar Ruta" / "Finalizar Ruta" (portados de
-// client-admin, features/location/pages/LocationPage.jsx).
+// e iconos, mapa de fondo claro y marcador del bus. Para DRIVER_ROLE agrega los
+// controles "Iniciar Ruta" / "Finalizar Ruta", que comparten su ubicación con los
+// pasajeros de sus grupos. Los pasajeros solo ven la ubicación de su conductor y
+// únicamente mientras él la comparte.
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,16 +12,29 @@ import OSMMapView from '../components/OSMMapView';
 import { useBusTracking } from '../hooks/useBusTracking';
 import { EmptyState } from '../../../shared/components/common/Common';
 import useAuthStore from '../../../shared/store/authStore';
-import { COLORS, SPACING, FONT_SIZE, RADIUS, MANAGER_ROLES } from '../../../shared/constants/theme';
+import { COLORS, SPACING, FONT_SIZE, RADIUS, ROLES } from '../../../shared/constants/theme';
 
 // Coordenadas de Kinal (destino de referencia usado por location-service)
 const DEFAULT_REGION = { latitude: 14.6258, longitude: -90.536, latitudeDelta: 0.03, longitudeDelta: 0.03 };
 
 export default function BusTrackingScreen() {
   const user = useAuthStore((state) => state.user);
-  const isManager = MANAGER_ROLES.includes(user?.role);
+  const isDriver = user?.role === ROLES.DRIVER;
 
-  const { coords, arrived, connected, error, routeActive, startRoute, endRoute } = useBusTracking();
+  const { coords, arrived, connected, sharing, noGroup, error, routeActive, startRoute, endRoute } = useBusTracking();
+
+  // Para quien no es conductor: nunca se insinúa una ubicación en vivo si no se está compartiendo
+  let emptyMessage = 'Esperando ubicación del bus';
+  let emptyIcon = 'directions-bus';
+  if (noGroup) {
+    emptyMessage = user?.role === ROLES.ADMIN
+      ? 'La ubicación solo la ven el conductor y los pasajeros de su grupo'
+      : 'Únete a un grupo con el código de tu conductor para ver la ubicación del bus';
+    emptyIcon = 'group-add';
+  } else if (sharing === false) {
+    emptyMessage = 'Tu conductor no está compartiendo su ubicación en este momento';
+    emptyIcon = 'location-off';
+  }
 
   const region = coords
     ? { latitude: coords.lat, longitude: coords.lng, latitudeDelta: 0.01, longitudeDelta: 0.01 }
@@ -58,9 +72,18 @@ export default function BusTrackingScreen() {
         </View>
       ) : null}
 
-      {!coords && !isManager ? (
+      {isDriver ? (
+        <View style={styles.sharingBadge}>
+          <MaterialIcons name={routeActive ? 'location-on' : 'location-off'} size={14} color={routeActive ? COLORS.success : COLORS.textMuted} />
+          <Text style={styles.sharingText}>
+            {routeActive ? 'Compartiendo tu ubicación con tus grupos' : 'No estás compartiendo tu ubicación'}
+          </Text>
+        </View>
+      ) : null}
+
+      {!coords && !isDriver ? (
         <View style={styles.emptyWrap}>
-          <EmptyState message="Esperando ubicación del bus" icon="directions-bus" />
+          <EmptyState message={emptyMessage} icon={emptyIcon} />
         </View>
       ) : (
         <OSMMapView
@@ -89,7 +112,7 @@ export default function BusTrackingScreen() {
         />
       )}
 
-      {isManager ? (
+      {isDriver ? (
         <View style={styles.driverControls}>
           <TouchableOpacity
             style={[styles.routeBtn, styles.startBtn, routeActive && styles.btnDisabled]}
@@ -127,6 +150,12 @@ const styles = StyleSheet.create({
   statusDot: { width: 9, height: 9, borderRadius: 5 },
   map: { flex: 1 },
   emptyWrap: { flex: 1 },
+  sharingBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center',
+    marginVertical: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: 6,
+    borderRadius: RADIUS.pill, backgroundColor: COLORS.surface,
+  },
+  sharingText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.textLight },
   banner: {
     position: 'absolute', top: 110, left: SPACING.md, right: SPACING.md, zIndex: 10,
     backgroundColor: COLORS.success, borderRadius: RADIUS.md, paddingVertical: SPACING.sm, alignItems: 'center',

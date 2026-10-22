@@ -7,6 +7,7 @@ import {
   updateGroup,
   deleteGroup,
   joinGroup,
+  getGroupAccess,
   setGroupLimit,
   getGroupLimit,
   getMyGroupLimit
@@ -32,6 +33,12 @@ router.post(
   '/join',
   validateJWT,
   joinGroup
+);
+
+router.get(
+  '/access',
+  validateJWT,
+  getGroupAccess
 );
 
 router.get(

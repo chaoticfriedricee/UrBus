@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePosts } from '../hooks/usePosts.js';
 import { usePostStore } from '../store/postStore.js';
+import { useGroupStore } from '../../groups/store/groupStore.js';
 import { PostCard } from '../components/PostCard.jsx';
 import { PostModal } from '../components/PostModal.jsx';
 import { DeletePostModal } from '../components/DeletePostModal.jsx';
@@ -71,6 +72,12 @@ export const PostListPage = () => {
     const markPostsSeen = usePostStore((s) => s.markPostsSeen);
 
     useEffect(() => { markPostsSeen(); }, [markPostsSeen]);
+
+    // Nombres de grupo para las etiquetas "Grupo: ..." (solo conductor y admin pueden listar grupos)
+    const fetchGroups = useGroupStore((s) => s.fetchGroups);
+    useEffect(() => {
+        if (isAdmin || isDriver) fetchGroups();
+    }, [isAdmin, isDriver, fetchGroups]);
 
     const visiblePosts = isAdmin && showDeleted
         ? allPosts

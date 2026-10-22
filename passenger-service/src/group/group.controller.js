@@ -245,12 +245,14 @@ export const joinGroup = async (req, res, next) => {
       });
     }
 
-    const group = await Group.findOne({ code: code.trim().toUpperCase(), isActive: true });
+    // El grupo (y con él su conductor) se resuelve solo a partir del código;
+    // cualquier groupId o driverId enviado en el body se ignora
+    const group = await Group.findOne({ code: code.trim().toUpperCase(), isActive: true, ...NOT_DELETED });
 
     if (!group) {
       return res.status(404).json({
         success: false,
-        message: 'Código de grupo inválido'
+        message: 'Código de grupo inválido o grupo inactivo'
       });
     }
 
@@ -263,13 +265,72 @@ export const joinGroup = async (req, res, next) => {
       });
     }
 
+    if (passenger.groupId && passenger.groupId.equals(group._id)) {
+      return res.status(409).json({
+        success: false,
+        message: 'Ya perteneces a este grupo'
+      });
+    }
+
+    // Un pasajero pertenece a un solo grupo (groupId); unirse a otro lo cambia de grupo
     passenger.groupId = group._id;
     await passenger.save();
 
     res.status(200).json({
       success: true,
       message: 'Te uniste al grupo correctamente',
-      data: { group, passenger }
+      data: {
+        group: { _id: group._id, name: group.name, code: group.code, isActive: group.isActive },
+        passenger: { _id: passenger._id, name: passenger.name, groupId: passenger.groupId }
+      }
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Busca el grupo activo al que pertenece la cuenta de un pasajero (o null)
+export const findActiveMembership = async (userId) => {
+  const passenger = await Passenger.findOne({ userId, isActive: true });
+  if (!passenger?.groupId) return null;
+
+  const group = await Group.findOne({ _id: passenger.groupId, isActive: true, ...NOT_DELETED });
+  if (!group) return null;
+
+  return { passenger, group };
+};
+
+// GET /groups/access — resuelve a qué grupos tiene acceso el usuario del token.
+// Lo consultan post-service y location-service (reenviando el token del usuario)
+// para autorizar publicaciones por grupo y la ubicación compartida del conductor.
+export const getGroupAccess = async (req, res, next) => {
+  try {
+
+    const { id, role } = req.user;
+    const access = {
+      userId: id,
+      role,
+      ownedGroupIds: [],
+      memberGroupId: null,
+      driverId: null
+    };
+
+    if (role === 'DRIVER_ROLE') {
+      const groups = await Group.find({ driverId: id, ...NOT_DELETED }).select('_id');
+      access.ownedGroupIds = groups.map((g) => String(g._id));
+      access.driverId = id;
+    } else if (role === 'PASSENGER_ROLE' || role === 'USER_ROLE') {
+      const membership = await findActiveMembership(id);
+      if (membership) {
+        access.memberGroupId = String(membership.group._id);
+        access.driverId = membership.group.driverId;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: access
     });
 
   } catch (err) {

@@ -1,6 +1,9 @@
 'use strict';
 
 import mongoose from 'mongoose';
+import Group from '../src/group/group.model.js';
+import GroupLimit from '../src/group/groupLimit.model.js';
+import Passenger from '../src/passenger/passenger.model.js';
 
 export const dbConnection = async () => {
     try {
@@ -38,6 +41,19 @@ export const dbConnection = async () => {
     } catch (error) {
         console.error(`Error al conectar la DB: ${error}`);
         process.exit(1);
+    }
+};
+
+// Con autoIndex: false Mongoose no crea los índices declarados en los esquemas
+// (código de grupo único, una sola membresía activa por cuenta). Se crean aquí de
+// forma explícita; si los datos existentes los violan, se avisa sin tumbar el servicio.
+export const ensureIndexes = async () => {
+    for (const model of [Group, GroupLimit, Passenger]) {
+        try {
+            await model.createIndexes();
+        } catch (error) {
+            console.error(`MongoDB | No se pudieron crear los índices de ${model.modelName}: ${error.message}`);
+        }
     }
 };
 

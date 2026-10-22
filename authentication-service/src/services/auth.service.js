@@ -11,6 +11,7 @@ const { toUserResponseDto, toUserDetailsDto } = require('../utils/user-mapper');
 const { BusinessException, UnauthorizedError } = require('../utils/errors');
 const ErrorCodes = require('../utils/error-codes');
 const RoleConstants = require('../utils/role-constants');
+const { DEFAULT_PASSENGER_TYPE } = require('../utils/passenger-type-constants');
 const env = require('../../configs/env.config');
 const logger = require('../../configs/logger.configuration');
 
@@ -64,6 +65,8 @@ async function registerAsync(registerDto, profilePictureFile) {
     email: registerDto.email.toLowerCase(),
     password: await passwordHashService.hashPassword(registerDto.password),
     status: false,
+    // Siempre lo decide el servidor: se ignora cualquier tipo enviado en el registro
+    passengerType: DEFAULT_PASSENGER_TYPE,
     userProfile: {
       profilePicture: profilePicturePath,
       phone: registerDto.phone,

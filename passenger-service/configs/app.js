@@ -10,7 +10,7 @@ import { parse } from 'yaml';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-import { dbConnection } from './db.js';
+import { dbConnection, ensureIndexes } from './db.js';
 import { corsOptions } from './cors.configuration.js';
 import { helmetOptions } from './helmet.configuration.js';
 import { requestLimit } from './rateLimit.configuration.js';
@@ -43,17 +43,26 @@ const routes = (app) => {
     app.use(`${BASE_PATH}/groups`, groupRoutes);
 };
 
-export const initServer = async () => {
+// Separado de initServer para poder montar la app en las pruebas sin abrir el puerto real
+export const createApp = () => {
     const app = express();
-    const PORT = process.env.PORT;
     app.set('trust proxy', 1);
+
+    middlewares(app);
+    routes(app);
+    app.use(`${BASE_PATH}/swagger`, swaggerUi.serve, swaggerUi.setup(swaggerDoc));
+    app.use(errorHandler);
+
+    return app;
+};
+
+export const initServer = async () => {
+    const PORT = process.env.PORT;
 
     try {
         await dbConnection();
-        middlewares(app);
-        routes(app);
-        app.use(`${BASE_PATH}/swagger`, swaggerUi.serve, swaggerUi.setup(swaggerDoc));
-        app.use(errorHandler);
+        await ensureIndexes();
+        const app = createApp();
 
         app.listen(PORT, () => {
             console.log(`Passenger Server running on port: ${PORT}`);

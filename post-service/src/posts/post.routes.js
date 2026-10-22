@@ -14,12 +14,14 @@ import {
 
 import { validateJWT } from '../../middlewares/validate-JWT.js';
 import { uploadFieldImage } from '../../middlewares/file-uploader.js';
+import { loadGroupAccess } from './group-access.js';
 
 const router = Router();
 
 router.post(
     '/',
     validateJWT,
+    loadGroupAccess,
     uploadFieldImage.single('image'),
     createPost
 );
@@ -27,6 +29,7 @@ router.post(
 router.get(
     '/',
     validateJWT,
+    loadGroupAccess,
     getPosts
 );
 
@@ -39,12 +42,14 @@ router.get(
 router.get(
     '/:id',
     validateJWT,
+    loadGroupAccess,
     getPostById
 );
 
 router.put(
     '/:id',
     validateJWT,
+    loadGroupAccess,
     uploadFieldImage.single('image'),
     updatePost
 );

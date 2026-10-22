@@ -1,6 +1,7 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('./sequelize');
 const { generateUserId } = require('../utils/uuid-generator');
+const { DEFAULT_PASSENGER_TYPE, ALLOWED_PASSENGER_TYPES } = require('../utils/passenger-type-constants');
 
 const User = sequelize.define('User', {
   id: {
@@ -48,6 +49,16 @@ const User = sequelize.define('User', {
     type: DataTypes.BOOLEAN,
     allowNull: false,
     defaultValue: false,
+  },
+  // Solo un administrador puede cambiarlo (PUT /users/:userId/passenger-type)
+  passengerType: {
+    type: DataTypes.STRING(25),
+    allowNull: false,
+    defaultValue: DEFAULT_PASSENGER_TYPE,
+    field: 'passenger_type',
+    validate: {
+      isIn: { args: [ALLOWED_PASSENGER_TYPES], msg: 'Tipo de pasajero no válido' },
+    },
   },
 }, {
   tableName: 'users',

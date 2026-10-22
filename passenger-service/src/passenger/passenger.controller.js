@@ -1,4 +1,5 @@
 import Passenger from './passenger.model.js';
+import { findActiveMembership } from '../group/group.controller.js';
 
 export const createPassenger = async (req, res, next) => {
   try {
@@ -55,7 +56,29 @@ export const getPassengers = async (req, res, next) => {
       });
     }
 
-    const passengers = await Passenger.find({ isActive: true });
+    if (req.user.role === 'ADMIN_ROLE' || req.user.role === 'DRIVER_ROLE') {
+      const passengers = await Passenger.find({ isActive: true });
+
+      return res.status(200).json({
+        success: true,
+        data: passengers
+      });
+    }
+
+    // Un pasajero solo ve a los compañeros de su grupo activo, y solo su nombre
+    // (sin cuenta vinculada, asistencia ni motivos de ausencia)
+    const membership = await findActiveMembership(req.user.id);
+
+    if (!membership) {
+      return res.status(200).json({
+        success: true,
+        data: []
+      });
+    }
+
+    const passengers = await Passenger.find({ groupId: membership.group._id, isActive: true })
+      .select('name groupId')
+      .sort({ name: 1 });
 
     res.status(200).json({
       success: true,

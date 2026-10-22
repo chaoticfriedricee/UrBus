@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io({ reconnection: false });
 const map = L.map('map-template').setView([14.6258, -90.5366], 15);
 
 // Coordenadas de Kinal
@@ -60,33 +60,12 @@ socket.on("updateBus", (coords) => {
 });
 
 
-//Iniciar viaje y enviar ubicación real del bus al servidor
-let hasSentInitial = false;
-if ("geolocation" in navigator) {
-  navigator.geolocation.watchPosition(
-    (position) => {
-      const coords = {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude
-      };
-      
-      console.log("Enviando ubicación real:", coords);
-      socket.emit("busLocation", coords);
-
-      if (!hasSentInitial) {
-        hasSentInitial = true;
-        alert("¡Viaje iniciado! Ubicación enviada al mapa.");
-      }
-    },
-    (err) => {
-      console.error("Error obteniendo ubicación:", err.message);
-    },
-    {
-      enableHighAccuracy: true,
-      maximumAge: 1000,
-      timeout: 5000
-    }
-  );
-} else {
-  alert("Geolocalización no soportada en este dispositivo.");
-}
+// La ubicación ahora requiere sesión: el servidor solo la comparte con el conductor
+// y los pasajeros de sus grupos. Esta vista pública no tiene token, así que ya no
+// transmite el GPS del visitante; solo informa que hay que usar la app UrBus.
+socket.on("connect_error", () => {
+  L.popup()
+    .setLatLng([kinalCoords.lat, kinalCoords.lng])
+    .setContent("Inicia sesión en la app UrBus para ver la ubicación de tu bus.")
+    .openOn(map);
+});

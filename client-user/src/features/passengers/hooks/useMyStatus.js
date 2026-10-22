@@ -2,12 +2,25 @@
 import { useState, useCallback } from 'react';
 import passengerClient from '../../../shared/api/passengerClient';
 import { joinGroup as joinGroupRequest } from '../../../shared/api/groupApi';
+import { getPassengers } from '../../../shared/api/passengerApi';
 
 export function useMyStatus() {
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [notLinked, setNotLinked] = useState(false);
+    // Compañeros del grupo: passenger-service solo devuelve los de tu grupo activo (nombre)
+    const [groupMates, setGroupMates] = useState([]);
+
+    const fetchGroupMates = useCallback(async () => {
+        try {
+            const response = await getPassengers();
+            const data = response.data.data ?? response.data;
+            setGroupMates(Array.isArray(data) ? data : []);
+        } catch {
+            setGroupMates([]);
+        }
+    }, []);
 
     const fetchStatus = useCallback(async () => {
         setLoading(true);
@@ -17,6 +30,8 @@ export function useMyStatus() {
         const response = await passengerClient.get('/passengers/me');
         const data = response.data.data ?? response.data;
         setStatus(data);
+        if (data?.groupId?.isActive) await fetchGroupMates();
+        else setGroupMates([]);
         } catch (err) {
         if (err.response?.status === 404) {
             setNotLinked(true);
@@ -26,23 +41,21 @@ export function useMyStatus() {
         } finally {
         setLoading(false);
         }
-    }, []);
+    }, [fetchGroupMates]);
 
     const joinGroup = useCallback(async (code) => {
         setLoading(true);
-        setError(null);
         try {
             const response = await joinGroupRequest(code);
             await fetchStatus();
-            return { success: true, data: response.data?.data };
+            return { success: true, message: response.data?.message, data: response.data?.data };
         } catch (err) {
             const msg = err.response?.data?.message ?? 'No se pudo unir al grupo';
-            setError(msg);
             return { success: false, error: msg };
         } finally {
             setLoading(false);
         }
     }, [fetchStatus]);
 
-    return { status, loading, error, notLinked, fetchStatus, joinGroup };
+    return { status, loading, error, notLinked, groupMates, fetchStatus, joinGroup };
 }

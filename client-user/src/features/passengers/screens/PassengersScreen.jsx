@@ -2,9 +2,10 @@
 // Pantalla "Pasajeros" — replica el mockup "Lista de Pasajeros".
 // - DRIVER_ROLE / ADMIN_ROLE: lista completa con marcado de presente/ausente.
 //   Crear pasajeros: ADMIN o DRIVER. Eliminar: solo ADMIN (reglas del backend).
-// - USER_ROLE / PASSENGER_ROLE: tarjeta con su propio estado de asistencia.
+// - USER_ROLE / PASSENGER_ROLE: tarjeta con su propio estado de asistencia, su
+//   grupo (o el formulario para unirse con un código) y sus compañeros de grupo.
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, RefreshControl, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, FlatList, ScrollView, RefreshControl, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import useAuthStore from '../../../shared/store/authStore';
 import { usePassengers } from '../hooks/usePassengers';
@@ -14,6 +15,7 @@ import PassengerFormModal from '../components/PassengerFormModal';
 import ConfirmModal from '../../../shared/components/common/ConfirmModal';
 import Button from '../../../shared/components/common/Button';
 import Input from '../../../shared/components/common/Input';
+import Avatar from '../../../shared/components/common/Avatar';
 import { Card, EmptyState, LoadingSpinner } from '../../../shared/components/common/Common';
 import { COLORS, SPACING, FONT_SIZE, MANAGER_ROLES, ROLES } from '../../../shared/constants/theme';
 
@@ -109,12 +111,18 @@ function ManagerPassengersView() {
 function JoinGroupCard({ loading, onJoin }) {
   const [code, setCode] = useState('');
   const [joining, setJoining] = useState(false);
+  const [feedback, setFeedback] = useState(null);
 
   const handleJoin = async () => {
-    if (!code.trim()) return;
+    if (!code.trim()) {
+      setFeedback({ ok: false, text: 'Ingresa el código de tu grupo' });
+      return;
+    }
     setJoining(true);
-    await onJoin(code.trim());
+    setFeedback(null);
+    const result = await onJoin(code.trim());
     setJoining(false);
+    if (!result?.success) setFeedback({ ok: false, text: result?.error ?? 'No se pudo unir al grupo' });
   };
 
   return (
@@ -129,21 +137,62 @@ function JoinGroupCard({ loading, onJoin }) {
         onChangeText={setCode}
         style={styles.groupInput}
       />
+      {feedback ? (
+        <Text style={[styles.feedback, { color: feedback.ok ? COLORS.success : COLORS.error }]}>{feedback.text}</Text>
+      ) : null}
       <Button title="Unirme al grupo" onPress={handleJoin} loading={joining || loading} />
     </Card>
   );
 }
 
+function MyGroupCard({ group, mates }) {
+  return (
+    <Card style={styles.groupCard}>
+      <Text style={styles.groupTitle}>Tu grupo</Text>
+      <Text style={styles.groupName}>{group.name}</Text>
+      <Text style={styles.groupSubtitle}>Código: {group.code}</Text>
+      {group.isActive ? (
+        <>
+          <Text style={[styles.groupTitle, styles.matesTitle]}>
+            Compañeros ({mates.length})
+          </Text>
+          {mates.map((mate) => (
+            <View key={mate._id} style={styles.mateRow}>
+              <Avatar name={mate.name} size={32} />
+              <Text style={styles.mateName} numberOfLines={1}>{mate.name}</Text>
+            </View>
+          ))}
+        </>
+      ) : (
+        <Text style={styles.groupSubtitle}>
+          Este grupo está inactivo. Tu conductor debe reactivarlo para ver compañeros, anuncios y ubicación.
+        </Text>
+      )}
+    </Card>
+  );
+}
+
 function MyStatusView() {
-  const { status, loading, error, notLinked, fetchStatus, joinGroup } = useMyStatus();
+  const { status, loading, error, notLinked, groupMates, fetchStatus, joinGroup } = useMyStatus();
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchStatus();
+    setRefreshing(false);
+  }, [fetchStatus]);
 
   const isPresent = status?.status === 'PRESENT';
   const group = status?.groupId;
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Mi Asistencia</Text>
@@ -173,24 +222,20 @@ function MyStatusView() {
           </Card>
 
           {group ? (
-            <Card style={styles.groupCard}>
-              <Text style={styles.groupTitle}>Tu grupo</Text>
-              <Text style={styles.groupName}>{group.name}</Text>
-              <Text style={styles.groupSubtitle}>Código: {group.code}</Text>
-            </Card>
+            <MyGroupCard group={group} mates={groupMates} />
           ) : (
             <JoinGroupCard loading={loading} onJoin={joinGroup} />
           )}
         </>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 export default function PassengersScreen() {
   const user = useAuthStore((state) => state.user);
-  const isPassengerRole = user?.role === ROLES.PASSENGER;
-  const isManager = MANAGER_ROLES.includes(user?.role) || isPassengerRole;
+  // PASSENGER_ROLE usa la misma vista que USER_ROLE: solo ve a los compañeros de su grupo
+  const isManager = MANAGER_ROLES.includes(user?.role);
   return isManager ? <ManagerPassengersView /> : <MyStatusView />;
 }
 
@@ -210,4 +255,9 @@ const styles = StyleSheet.create({
   groupSubtitle: { fontSize: FONT_SIZE.sm, color: COLORS.textMuted, marginBottom: SPACING.sm },
   groupName: { fontSize: FONT_SIZE.lg, fontWeight: '800', color: COLORS.primary, marginBottom: 2 },
   groupInput: { marginBottom: SPACING.sm },
+  feedback: { fontSize: FONT_SIZE.sm, fontWeight: '600', marginBottom: SPACING.sm },
+  scrollContent: { paddingBottom: SPACING.xl },
+  matesTitle: { marginTop: SPACING.md },
+  mateRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: 6 },
+  mateName: { flex: 1, fontSize: FONT_SIZE.md, color: COLORS.text },
 });

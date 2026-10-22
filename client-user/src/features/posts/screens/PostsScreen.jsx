@@ -2,11 +2,13 @@
 // Pantalla "Anuncios del Bus" — replica el mockup: tarjetas con icono cuadrado,
 // título en negrita y "Hace X min". Para DRIVER_ROLE/ADMIN_ROLE agrega un botón
 // flotante para publicar y acciones de editar/eliminar (funciones portadas de
-// client-admin, features/post/pages/PostListPage.jsx).
+// client-admin, features/post/pages/PostListPage.jsx). post-service solo devuelve
+// los avisos generales y los del grupo (o grupos) del usuario.
 import React, { useEffect, useCallback, useState } from 'react';
 import { FlatList, RefreshControl, TouchableOpacity, View, Text, Image, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { usePosts } from '../hooks/usePosts';
+import { getGroups } from '../../../shared/api/groupApi';
 import PostFormModal from '../components/PostFormModal';
 import ConfirmModal from '../../../shared/components/common/ConfirmModal';
 import { EmptyState, LoadingSpinner } from '../../../shared/components/common/Common';
@@ -30,8 +32,23 @@ export default function PostsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [formModal, setFormModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [groups, setGroups] = useState([]);
 
   useEffect(() => { fetchPosts(false); }, [fetchPosts]);
+
+  // Grupos a los que el conductor (o admin) puede dirigir un aviso
+  useEffect(() => {
+    if (!canManage) return;
+    getGroups()
+      .then(({ data }) => setGroups((data.data ?? []).filter((g) => g.isActive)))
+      .catch(() => setGroups([]));
+  }, [canManage]);
+
+  const audienceLabel = (post) => {
+    if (!post.groupId) return 'General';
+    if (!canManage) return 'Tu grupo';
+    return groups.find((g) => g._id === post.groupId)?.name ?? 'Grupo';
+  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -79,7 +96,9 @@ export default function PostsScreen({ navigation }) {
               )}
               <View style={styles.cardBody}>
                 <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-                <Text style={styles.cardTime}>{timeAgo(item.createdAt)}</Text>
+                <Text style={styles.cardTime}>
+                  {timeAgo(item.createdAt)} · {audienceLabel(item)}
+                </Text>
               </View>
               {canEdit ? (
                 <View style={styles.cardActions}>
@@ -105,6 +124,7 @@ export default function PostsScreen({ navigation }) {
       <PostFormModal
         visible={Boolean(formModal)}
         post={formModal?.post}
+        groups={groups}
         loading={loading}
         onClose={() => setFormModal(null)}
         onSubmit={handleFormSubmit}

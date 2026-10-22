@@ -53,4 +53,12 @@ const passengerSchema = new Schema(
     versionKey: false
 });
 
+// Una cuenta solo puede tener un perfil de pasajero activo y, por lo tanto,
+// una sola membresía de grupo (groupId) a la vez
+passengerSchema.index(
+    { userId: 1 },
+    { unique: true, partialFilterExpression: { isActive: true } }
+);
+passengerSchema.index({ groupId: 1 });
+
 export default model('Passenger', passengerSchema);

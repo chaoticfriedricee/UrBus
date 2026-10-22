@@ -39,4 +39,6 @@ const groupSchema = new Schema(
     versionKey: false
 });
 
+groupSchema.index({ driverId: 1 });
+
 export default model('Group', groupSchema);

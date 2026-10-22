@@ -40,33 +40,41 @@ const routes = (app) => {
     });
 };
 
-export const initServer = async () => {
+// Separado de initServer para poder montar la app en las pruebas sin abrir el puerto real
+export const createApp = () => {
     const app = express();
-    const PORT = process.env.PORT || 5001;
     app.set('trust proxy', 1);
+
+    middlewares(app);
+    routes(app);
+    app.use(`${BASE_PATH}/swagger`, swaggerUi.serve, swaggerUi.setup(swaggerDoc));
+
+    app.use((req, res) => {
+        res.status(404).json({
+            success: false,
+            message: 'Ruta no encontrada en el servidor.'
+        });
+    });
+
+    // Errores lanzados por middlewares (p. ej. multer al subir la imagen)
+    app.use((err, req, res, next) => {
+        const status = err.name === 'MulterError' ? 400 : (err.statusCode || 500);
+        if (status === 500) console.error(err);
+        res.status(status).json({
+            success: false,
+            message: status === 500 ? 'Error interno del servidor' : err.message
+        });
+    });
+
+    return app;
+};
+
+export const initServer = async () => {
+    const PORT = process.env.PORT || 5001;
 
     try {
         await dbConnection();
-        middlewares(app);
-        routes(app);
-        app.use(`${BASE_PATH}/swagger`, swaggerUi.serve, swaggerUi.setup(swaggerDoc));
-
-        app.use((req, res) => {
-            res.status(404).json({
-                success: false,
-                message: 'Ruta no encontrada en el servidor.'
-            });
-        });
-
-        // Errores lanzados por middlewares (p. ej. multer al subir la imagen)
-        app.use((err, req, res, next) => {
-            const status = err.name === 'MulterError' ? 400 : (err.statusCode || 500);
-            if (status === 500) console.error(err);
-            res.status(status).json({
-                success: false,
-                message: status === 500 ? 'Error interno del servidor' : err.message
-            });
-        });
+        const app = createApp();
 
         app.listen(PORT, () => {
             console.log(`Post Service ejecutándose en puerto: ${PORT}`);

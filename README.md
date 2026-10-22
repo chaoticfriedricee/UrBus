@@ -170,10 +170,25 @@ http://localhost:5166/api/v1
 | GET    | /users/{userId}       | Datos de contacto de una cuenta | Sí (JWT)      | ADMIN_ROLE, DRIVER_ROLE |
 | PUT    | /users/{userId}/profile | Editar nombre, apellido, teléfono y foto | Sí (JWT) | El propio usuario o ADMIN_ROLE |
 | PUT    | /users/{userId}/role  | Actualizar rol de usuario       | Sí (JWT)      | ADMIN_ROLE |
+| PUT    | /users/{userId}/passenger-type | Cambiar el tipo de pasajero (`{ passengerType }`) | Sí (JWT) | ADMIN_ROLE |
 | PUT    | /users/{userId}/verify-email | Verificar el correo manualmente | Sí (JWT) | ADMIN_ROLE |
 | GET    | /users/{userId}/roles | Obtener roles de un usuario     | Sí (JWT)      | ADMIN_ROLE |
 | GET    | /users/by-role        | Listar usuarios por rol         | Sí (JWT)      | ADMIN_ROLE |
  
+### Tipo de pasajero
+
+Cada usuario tiene un `passengerType`, independiente de su rol:
+
+| Valor | Descripción |
+| ----- | ----------- |
+| `FIXED_PASSENGER` | Pasajero fijo. **Se asigna automáticamente al registrarse.** |
+| `OCCASIONAL_PASSENGER` | Pasajero eventual. |
+
+* El servidor lo asigna en el registro e ignora cualquier valor (o rol) que envíe el cliente.
+* Editar el propio perfil no lo modifica; solo un `ADMIN_ROLE` puede cambiarlo, desde **Usuarios** en el panel.
+* Cambiarlo nunca cambia el rol ni concede permisos.
+* Al arrancar, el servicio agrega la columna `users.passenger_type` si no existe (`src/database/migrations.js`); los usuarios existentes quedan como `FIXED_PASSENGER`.
+
 ---
  
 ## LocationService
@@ -182,10 +197,14 @@ Servicio encargado de la ubicación en tiempo real del bus.
  
 ### Funcionalidades
  
-* Seguimiento de ubicación con Socket.IO
-* Emisión del evento `updateBus`
-* Detección de llegada a Kinal y emisión del evento `busArrived`
-* Vista de seguimiento servida en `/urbus/v1/`
+* Seguimiento de ubicación con Socket.IO, autenticado con el access token (`io(url, { auth: { token } })`)
+* El conductor comparte su ubicación solo cuando lo decide (`startSharing` / `stopSharing`; se detiene también al desconectarse)
+* La ubicación solo llega al conductor y a los pasajeros de sus grupos activos (`locationStatus`, `updateBus`, `busArrived`)
+* Solo se guarda en memoria la última posición de quien comparte; no hay historial
+* Detección de llegada a Kinal por conductor y emisión del evento `busArrived`
+* Vista pública en `/urbus/v1/` (sin sesión: muestra el mapa pero no transmite ni recibe ubicaciones)
+
+Requiere `PASSENGER_SERVICE_URL` (por defecto `http://localhost:3011/urbus/v1`) para validar a qué conductor puede seguir cada usuario.
  
 ### Endpoints
  
@@ -231,6 +250,31 @@ http://localhost:3011/urbus/v1/passengers
 | PATCH  | /:id/status | Actualizar estado |
 | DELETE | /:id        | Eliminar pasajero |
 | GET    | /swagger    | Documentación de la API (Swagger UI) |
+
+`GET /` devuelve todos los pasajeros a `ADMIN_ROLE` y `DRIVER_ROLE`; a un pasajero (`USER_ROLE` / `PASSENGER_ROLE`) solo le devuelve el nombre de los compañeros de su grupo activo.
+
+#### Grupos
+
+**Base URL:** `http://localhost:3011/urbus/v1/groups`
+
+| Método | Endpoint | Descripción | Roles |
+| ------ | -------- | ----------- | ----- |
+| POST   | /        | Crear grupo (genera un código único de 6 caracteres) | DRIVER_ROLE (según su límite) |
+| GET    | /        | Listar grupos | ADMIN_ROLE (todos), DRIVER_ROLE (los suyos) |
+| GET    | /:id     | Detalle con pasajeros | ADMIN_ROLE, DRIVER_ROLE dueño |
+| PATCH  | /:id     | Renombrar / activar / desactivar | ADMIN_ROLE, DRIVER_ROLE dueño |
+| DELETE | /:id     | Eliminar (soft delete; libera a sus pasajeros) | ADMIN_ROLE, DRIVER_ROLE dueño |
+| POST   | /join    | Unirse con `{ code }` | USER_ROLE, PASSENGER_ROLE con perfil vinculado |
+| GET    | /access  | Grupos a los que tiene acceso el usuario del token (uso interno de post y location) | Cualquiera autenticado |
+| GET/PUT | /limit/... | Límite de grupos por conductor | ADMIN_ROLE / el propio conductor |
+
+Reglas:
+
+* El conductor de un grupo siempre es el usuario del token; no se puede asignar a otro.
+* El código se valida en el servidor y se resuelve al grupo y su conductor; los grupos inactivos o eliminados no aceptan pasajeros.
+* Un pasajero pertenece a **un solo grupo** a la vez (`Passenger.groupId`, tal como ya estaba en el esquema). Unirse de nuevo al mismo grupo responde 409; unirse a otro grupo lo cambia de grupo.
+* Para unirse, la cuenta debe tener un perfil de pasajero vinculado, que crea un administrador o conductor (modelo de aprobación existente).
+* Al arrancar se crean los índices únicos `groups.code` y "un perfil de pasajero activo por `userId`" (`ensureIndexes` en `configs/db.js`).
  
 ---
  
@@ -265,6 +309,8 @@ http://localhost:5001/urbus/v1/posts
 | DELETE | /:id            | Eliminar              |
 | PATCH  | /:id/reactivate | Reactivar             |
 | GET    | /swagger        | Documentación de la API (Swagger UI) |
+
+Avisos por grupo: un post con `groupId` solo lo ven el administrador, el conductor dueño del grupo y sus pasajeros; sin `groupId` es un aviso general para todos (así quedan los posts existentes). Un conductor solo puede publicar en sus propios grupos. `GET /?groupId=...` filtra por grupo y responde 403 si el usuario no pertenece a él. Requiere `PASSENGER_SERVICE_URL`.
  
 ---
  
@@ -366,6 +412,21 @@ cd authentication-service
 pnpm install
 pnpm run dev
 ```
+
+---
+
+### Pruebas automatizadas
+
+Cada servicio backend tiene pruebas con el runner nativo de Node (`node --test`):
+
+```bash
+cd authentication-service && pnpm test   # necesita PostgreSQL (crea y borra urbus_users_test)
+cd passenger-service && pnpm test        # necesita MongoDB (usa urbus_passenger_test)
+cd post-service && pnpm test             # necesita MongoDB (usa urbus_posts_test)
+cd location-service && pnpm test         # sin base de datos
+```
+
+Con `docker compose` levantado, PostgreSQL y MongoDB ya están disponibles en los puertos por defecto. `TEST_DB_NAME` y `TEST_URI_MONGODB` permiten cambiar las bases de prueba.
  
 ---
  

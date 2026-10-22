@@ -6,6 +6,7 @@ const { toUserResponseDto } = require('../utils/user-mapper');
 const { ArgumentError, BusinessException, ConflictError, ForbiddenError, NotFoundError } = require('../utils/errors');
 const ErrorCodes = require('../utils/error-codes');
 const RoleConstants = require('../utils/role-constants');
+const { ALLOWED_PASSENGER_TYPES } = require('../utils/passenger-type-constants');
 const logger = require('../../configs/logger.configuration');
 
 /**
@@ -49,6 +50,26 @@ async function updateUserRoleAsync(userId, roleName) {
   user = await userRepository.getByIdAsync(userId);
 
   return toUserResponseDto(user, role.name);
+}
+
+/**
+ * Cambia el tipo de pasajero (fijo, eventual). Solo lo usa un administrador
+ * (la ruta aplica authorize(ADMIN_ROLE)). No modifica el rol: el tipo de
+ * pasajero no concede permisos.
+ */
+async function updatePassengerTypeAsync(userId, passengerType) {
+  const normalizedType = (passengerType || '').toString().trim().toUpperCase();
+
+  if (!ALLOWED_PASSENGER_TYPES.includes(normalizedType)) {
+    throw new ArgumentError(`Tipo de pasajero no válido. Usa ${ALLOWED_PASSENGER_TYPES.join(' o ')}`);
+  }
+
+  // Lanza NotFoundError si el usuario no existe
+  await userRepository.getByIdAsync(userId);
+  await userRepository.updatePassengerTypeAsync(userId, normalizedType);
+
+  const user = await userRepository.getByIdAsync(userId);
+  return toUserResponseDto(user);
 }
 
 /**
@@ -152,6 +173,7 @@ module.exports = {
   getUserByIdAsync,
   updateProfileAsync,
   updateUserRoleAsync,
+  updatePassengerTypeAsync,
   getUserRolesAsync,
   getUsersByRoleAsync,
   verifyUserEmailByAdminAsync,
