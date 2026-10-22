@@ -14,7 +14,18 @@ export const validateJWT = (req, res, next) => {
 
         const token = authHeader.split(' ')[1];
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+            issuer: process.env.JWT_ISSUER,
+            audience: process.env.JWT_AUDIENCE
+        });
+
+        // Un refresh token (dura días) no debe servir como access token
+        if (decoded.type === 'refresh') {
+            return res.status(401).json({
+                message: 'Token inválido'
+            });
+        }
+
         const rawRole =
             decoded.role ||
             decoded.roles ||
