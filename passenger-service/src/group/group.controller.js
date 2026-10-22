@@ -153,6 +153,22 @@ export const updateGroup = async (req, res, next) => {
       });
     }
 
+    // Reactivar un grupo cuenta contra el límite del conductor (el admin puede excederlo)
+    const isReactivating = (isActive === true || isActive === 'true') && !group.isActive;
+
+    if (isReactivating && req.user.role === 'DRIVER_ROLE') {
+      const limitDoc = await GroupLimit.findOne({ driverId: group.driverId });
+      const maxGroups = limitDoc ? limitDoc.maxGroups : 0;
+      const activeGroups = await Group.countDocuments({ driverId: group.driverId, isActive: true });
+
+      if (activeGroups >= maxGroups) {
+        return res.status(403).json({
+          success: false,
+          message: `Ha alcanzado el límite de grupos permitidos (${maxGroups}). Solicite un límite mayor a un administrador`
+        });
+      }
+    }
+
     if (name !== undefined) group.name = name.trim();
     if (isActive !== undefined) group.isActive = isActive;
 
