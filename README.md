@@ -15,8 +15,8 @@ Cada servicio puede ser desarrollado y mantenido por diferentes equipos de estud
  
 El sistema está construido utilizando:
  
-* **Node.js** para servicios backend y APIs
-* **ASP.NET Core** para el servicio de autenticación
+* **Node.js** (Express) para todos los servicios backend y APIs
+* **Sequelize** como ORM de PostgreSQL en el servicio de autenticación
 * **PostgreSQL** como base de datos relacional para usuarios
 * **MongoDB** como base de datos NoSQL para microservicios
 * **Cloudinary** para almacenamiento de imágenes
@@ -45,12 +45,12 @@ Esto permite:
 | Tecnología     | Uso en el proyecto                  |
 | -------------- | ----------------------------------- |
 | Node.js        | Desarrollo de microservicios        |
-| ASP.NET Core   | Autenticación y persistencia de usuarios |
+| Sequelize      | ORM de PostgreSQL en la autenticación |
 | PostgreSQL     | Base de datos relacional            |
 | MongoDB        | Base de datos NoSQL por servicio    |
 | Cloudinary     | Almacenamiento de imágenes          |
 | Docker         | Contenedorización de base de datos  |
-| Docker Compose | Orquestación de PostgreSQL          |
+| Docker Compose | Orquestación de todo el proyecto    |
 | Git / GitHub   | Control de versiones y colaboración |
  
 ---
@@ -102,7 +102,7 @@ Cada microservicio utiliza su propia base de datos siguiendo buenas prácticas d
 | PassengerService      | passenger     | MongoDB    |
 | PostService           | urbus_posts   | MongoDB    |
  
-> El archivo de orquestación disponible es `pg_db/docker-compose.yml` para PostgreSQL. MongoDB debe estar disponible localmente o en una instancia externa.
+> `docker-compose.yml` (en la raíz) levanta PostgreSQL, MongoDB y todos los servicios. `pg_db/docker-compose.yml` levanta solo PostgreSQL.
  
 ---
  
@@ -129,7 +129,7 @@ Microservicio encargado de la autenticación y gestión de usuarios.
 * Reenvío de verificación
 * Recuperación y restablecimiento de contraseña
 * Control de acceso mediante JWT
-* Renovación y revocación de refresh token
+* Renovación del access token con refresh token
 * Gestión de roles y rutas administrativas
 * Carga opcional de imagen de perfil con multipart/form-data
  
@@ -160,13 +160,17 @@ http://localhost:5166/api/v1
 | POST   | /auth/forgot-password       | Solicitar recuperación de contraseña     | No |
 | POST   | /auth/reset-password        | Restablecer contraseña                   | No |
 | POST   | /auth/refresh               | Renovar access token usando refresh token | No |
-| POST   | /auth/logout                | Cerrar sesión (revocar refresh token)    | Sí (JWT) |
+| GET    | /auth/me                    | Perfil completo del usuario autenticado  | Sí (JWT) |
  
 #### Gestión de Usuarios
  
 | Método | Endpoint              | Descripción                     | Autenticación | Roles |
 | ------ | --------------------- | ------------------------------- | -------------- | -------- |
+| GET    | /users                | Listar todos los usuarios       | Sí (JWT)      | ADMIN_ROLE |
+| GET    | /users/{userId}       | Datos de contacto de una cuenta | Sí (JWT)      | ADMIN_ROLE, DRIVER_ROLE |
+| PUT    | /users/{userId}/profile | Editar nombre, apellido, teléfono y foto | Sí (JWT) | El propio usuario o ADMIN_ROLE |
 | PUT    | /users/{userId}/role  | Actualizar rol de usuario       | Sí (JWT)      | ADMIN_ROLE |
+| PUT    | /users/{userId}/verify-email | Verificar el correo manualmente | Sí (JWT) | ADMIN_ROLE |
 | GET    | /users/{userId}/roles | Obtener roles de un usuario     | Sí (JWT)      | ADMIN_ROLE |
 | GET    | /users/by-role        | Listar usuarios por rol         | Sí (JWT)      | ADMIN_ROLE |
  
@@ -270,10 +274,14 @@ http://localhost:5001/urbus/v1/posts
 UrBus/
 ├── authentication-service/
 ├── client-admin/
+├── client-user/
+├── dockerfiles/
 ├── location-service/
 ├── passenger-service/
 ├── post-service/
 ├── pg_db/
+├── docker-compose.yml
+├── .env.docker.example
 ├── .gitignore
 └── README.md
 ```
@@ -286,7 +294,6 @@ UrBus/
  
 * Node.js 18+
 * pnpm
-* .NET 8 SDK
 * Docker
 * PostgreSQL
 * MongoDB
@@ -300,6 +307,17 @@ UrBus/
 git clone <url-del-repositorio>
 cd UrBus
 ```
+ 
+---
+ 
+### Todo el proyecto con Docker
+ 
+```bash
+cp .env.docker.example .env.docker   # completar los valores "change-me"
+docker compose --env-file .env.docker up -d --build
+```
+ 
+Panel admin en http://localhost:5173.
  
 ---
  
@@ -341,13 +359,12 @@ pnpm run dev
  
 ---
  
-### Ejecutar servicio ASP.NET Core
+### Ejecutar servicio de autenticación
  
 ```bash
-cd authentication-service/src/AuthenticationService.Api
-dotnet restore
-dotnet build
-dotnet run
+cd authentication-service
+pnpm install
+pnpm run dev
 ```
  
 ---
