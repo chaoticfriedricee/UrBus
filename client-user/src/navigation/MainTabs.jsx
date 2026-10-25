@@ -14,6 +14,7 @@ import PostDetailScreen from '../features/posts/screens/PostDetailScreen';
 import ProfileScreen from '../features/profile/screens/ProfileScreen';
 import GroupsScreen from '../features/groups/screens/GroupsScreen';
 import GroupDetailScreen from '../features/groups/screens/GroupDetailScreen';
+import UsersScreen from '../features/users/screens/UsersScreen';
 
 import useAuthStore from '../shared/store/authStore';
 import { COLORS, MANAGER_ROLES } from '../shared/constants/theme';
@@ -23,6 +24,7 @@ const PassengersStackNav = createNativeStackNavigator();
 const BusStackNav = createNativeStackNavigator();
 const PostsStackNav = createNativeStackNavigator();
 const GroupsStackNav = createNativeStackNavigator();
+const ProfileStackNav = createNativeStackNavigator();
 
 function PassengersStack() {
   return (
@@ -63,6 +65,20 @@ function GroupsStack() {
         options={{ headerShown: true, title: 'Grupo' }}
       />
     </GroupsStackNav.Navigator>
+  );
+}
+
+// "Gestionar usuarios" (solo ADMIN) se abre desde el perfil
+function ProfileStack() {
+  return (
+    <ProfileStackNav.Navigator screenOptions={{ headerShown: false }}>
+      <ProfileStackNav.Screen name="ProfileMain" component={ProfileScreen} />
+      <ProfileStackNav.Screen
+        name="Users"
+        component={UsersScreen}
+        options={{ headerShown: true, title: 'Usuarios' }}
+      />
+    </ProfileStackNav.Navigator>
   );
 }
 
@@ -111,7 +127,7 @@ export default function MainTabs() {
       <Tab.Screen name="Mapa" component={BusStack} />
       {isManager ? <Tab.Screen name="Grupos" component={GroupsStack} /> : null}
       <Tab.Screen name="Anuncios" component={PostsStack} />
-      <Tab.Screen name="Perfil" component={ProfileScreen} />
+      <Tab.Screen name="Perfil" component={ProfileStack} />
     </Tab.Navigator>
   );
 }

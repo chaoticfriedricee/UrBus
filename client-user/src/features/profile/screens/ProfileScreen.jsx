@@ -11,9 +11,9 @@ import useAuthStore from '../../../shared/store/authStore';
 import { useMyStatus } from '../../passengers/hooks/useMyStatus';
 import Button from '../../../shared/components/common/Button';
 import Input from '../../../shared/components/common/Input';
-import { COLORS, SPACING, FONT_SIZE, RADIUS, MANAGER_ROLES, ROLE_LABELS } from '../../../shared/constants/theme';
+import { COLORS, SPACING, FONT_SIZE, RADIUS, MANAGER_ROLES, ROLE_LABELS, ROLES } from '../../../shared/constants/theme';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const user = useAuthStore((state) => state.user);
   const updateUser = useAuthStore((state) => state.updateUser);
   const logout = useAuthStore((state) => state.logout);
@@ -181,6 +181,17 @@ export default function ProfileScreen() {
         )}
       </View>
 
+      {user?.role === ROLES.ADMIN ? (
+        <TouchableOpacity style={styles.adminRow} onPress={() => navigation.navigate('Users')}>
+          <MaterialIcons name="manage-accounts" size={22} color={COLORS.primary} />
+          <View style={styles.adminText}>
+            <Text style={styles.adminTitle}>Gestionar usuarios</Text>
+            <Text style={styles.adminHint}>Roles y verificación de correo</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={22} color={COLORS.textMuted} />
+        </TouchableOpacity>
+      ) : null}
+
       <Button title="Cerrar sesión" variant="secondary" onPress={confirmLogout} style={styles.logoutBtn} />
     </ScrollView>
   );
@@ -210,4 +221,11 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: SPACING.sm, width: '100%' },
   flexBtn: { flex: 1 },
   logoutBtn: { marginTop: SPACING.lg, marginBottom: SPACING.xl },
+  adminRow: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.md,
+    padding: SPACING.md, borderRadius: RADIUS.xl, backgroundColor: COLORS.surface,
+  },
+  adminText: { flex: 1 },
+  adminTitle: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
+  adminHint: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted, marginTop: 2 },
 });
