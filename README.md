@@ -250,7 +250,7 @@ http://localhost:3011/urbus/v1/passengers
 | DELETE | /:id        | Eliminar pasajero |
 | GET    | /swagger    | Documentación de la API (Swagger UI) |
 
-`GET /` devuelve todos los pasajeros a `ADMIN_ROLE` y `DRIVER_ROLE`; a un pasajero (`USER_ROLE` / `PASSENGER_ROLE`) solo le devuelve el nombre de los compañeros de su grupo activo.
+`GET /` devuelve todos los pasajeros a `ADMIN_ROLE` y `DRIVER_ROLE`; a un pasajero (`USER_ROLE` / `PASSENGER_ROLE`) solo le devuelve el nombre de los compañeros de su grupo activo. Con `GET /?groupId=<id>`, el administrador o el conductor dueño de ese grupo reciben solo sus pasajeros (403 si el grupo es de otro conductor, 404 si fue eliminado); es lo que usan los selectores de grupo de la lista de pasajeros en client-admin y client-user.
 
 #### Grupos
 

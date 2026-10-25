@@ -3,7 +3,9 @@
 // passenger-service expone create / list / me / editar nombre / status / delete.
 import passengerClient from './passengerClient';
 
-export const getPassengers = () => passengerClient.get('/passengers');
+// Con groupId, solo los pasajeros de ese grupo (ADMIN o el DRIVER dueño del grupo)
+export const getPassengers = (groupId) =>
+    passengerClient.get('/passengers', { params: groupId ? { groupId } : undefined });
 
 export const getMyPassengerStatus = () => passengerClient.get('/passengers/me');
 

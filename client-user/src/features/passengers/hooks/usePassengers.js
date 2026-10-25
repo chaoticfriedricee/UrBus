@@ -2,25 +2,33 @@
 // Gestión de la lista de pasajeros — función portada de client-admin
 // (features/passangers/store/passengerStore.js). Disponible para DRIVER_ROLE y
 // ADMIN_ROLE; el toggle de estado solo lo pueden usar ellos (no el pasajero).
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { getPassengers, createPassenger, updatePassengerStatus, deletePassenger } from '../../../shared/api/passengerApi';
 
 export function usePassengers() {
   const [passengers, setPassengers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Al cambiar de grupo rápido, solo se aplica la respuesta de la última petición
+  const lastRequest = useRef(0);
 
-  const fetchPassengers = useCallback(async () => {
+  // groupId opcional: solo los pasajeros de ese grupo. Devuelve el status HTTP del
+  // error para que la pantalla pueda volver a "Todos" si el grupo ya no existe
+  const fetchPassengers = useCallback(async (groupId = null) => {
+    const requestId = ++lastRequest.current;
+    const isLatest = () => requestId === lastRequest.current;
     setLoading(true);
     setError(null);
     try {
-      const response = await getPassengers();
+      const response = await getPassengers(groupId);
       const data = response.data.data ?? response.data;
-      setPassengers(Array.isArray(data) ? data : []);
+      if (isLatest()) setPassengers(Array.isArray(data) ? data : []);
+      return { success: true };
     } catch (err) {
-      setError(err.response?.data?.message ?? 'No se pudieron cargar los pasajeros');
+      if (isLatest()) setError(err.response?.data?.message ?? 'No se pudieron cargar los pasajeros');
+      return { success: false, status: err.response?.status };
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
   }, []);
 

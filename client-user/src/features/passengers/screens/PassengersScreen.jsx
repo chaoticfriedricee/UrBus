@@ -10,6 +10,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import useAuthStore from '../../../shared/store/authStore';
 import { usePassengers } from '../hooks/usePassengers';
 import { useMyStatus } from '../hooks/useMyStatus';
+import { getGroups } from '../../../shared/api/groupApi';
 import PassengerListItem from '../components/PassengerListItem';
 import PassengerFormModal from '../components/PassengerFormModal';
 import ConfirmModal from '../../../shared/components/common/ConfirmModal';
@@ -18,6 +19,38 @@ import Input from '../../../shared/components/common/Input';
 import Avatar from '../../../shared/components/common/Avatar';
 import { Card, EmptyState, LoadingSpinner } from '../../../shared/components/common/Common';
 import { COLORS, SPACING, FONT_SIZE, MANAGER_ROLES, ROLES } from '../../../shared/constants/theme';
+
+// Selector del grupo de pasajeros que se quiere ver (conductor: sus grupos; admin: todos)
+function GroupChips({ groups, selectedGroupId, onSelect }) {
+  const options = [{ _id: null, name: 'Todos' }, ...groups];
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.chipsScroll}
+      contentContainerStyle={styles.chips}
+    >
+      {options.map((g) => {
+        const selected = g._id === selectedGroupId;
+        const hint = g._id ? (g.isActive ? `${g.passengerCount ?? 0}` : 'inactivo') : null;
+        return (
+          <TouchableOpacity
+            key={g._id ?? 'all'}
+            style={[styles.chip, selected && styles.chipSelected]}
+            onPress={() => { if (!selected) onSelect(g._id); }}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: selected }}
+          >
+            <Text style={[styles.chipText, selected && styles.chipTextSelected]} numberOfLines={1}>
+              {g.name}
+              {hint ? <Text style={styles.chipHint}>{`  ${hint}`}</Text> : null}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+}
 
 function ManagerPassengersView() {
   const user = useAuthStore((state) => state.user);
@@ -31,18 +64,47 @@ function ManagerPassengersView() {
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [groups, setGroups] = useState([]);
+  // null = todos; si no, el _id del grupo que el conductor quiere ver en este momento
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
 
-  useEffect(() => { fetchPassengers(); }, [fetchPassengers]);
+  const loadGroups = useCallback(async () => {
+    try {
+      const response = await getGroups();
+      const data = response.data.data ?? response.data;
+      setGroups(Array.isArray(data) ? data : []);
+    } catch {
+      setGroups([]);
+    }
+  }, []);
+
+  const loadPassengers = useCallback(async (groupId) => {
+    const result = await fetchPassengers(groupId);
+    // El grupo ya no existe o no es suyo: se vuelve a la lista completa (el efecto la carga)
+    if (groupId && [400, 403, 404].includes(result.status)) {
+      setSelectedGroupId(null);
+      loadGroups();
+    }
+  }, [fetchPassengers, loadGroups]);
+
+  useEffect(() => { loadGroups(); }, [loadGroups]);
+  useEffect(() => { loadPassengers(selectedGroupId); }, [loadPassengers, selectedGroupId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchPassengers();
+    await Promise.all([loadPassengers(selectedGroupId), loadGroups()]);
     setRefreshing(false);
-  }, [fetchPassengers]);
+  }, [loadPassengers, loadGroups, selectedGroupId]);
+
+  const selectedGroup = groups.find((g) => g._id === selectedGroupId) ?? null;
 
   const handleFormSubmit = async (payload) => {
     const result = await addPassenger(payload);
-    if (result.success) setShowCreate(false);
+    if (result.success) {
+      setShowCreate(false);
+      // Un pasajero nuevo no tiene grupo: si se está viendo un grupo, no pertenece a esa lista
+      if (selectedGroupId) await loadPassengers(selectedGroupId);
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -55,8 +117,10 @@ function ManagerPassengersView() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Lista de Pasajeros</Text>
-          <Text style={styles.headerSubtitle}>
-            {loading ? 'Cargando...' : `${presentCount} de ${passengers.length} presentes`}
+          <Text style={styles.headerSubtitle} numberOfLines={1}>
+            {loading
+              ? 'Cargando...'
+              : `${selectedGroup ? `${selectedGroup.name} · ` : ''}${presentCount} de ${passengers.length} presentes`}
           </Text>
         </View>
         {canCreate ? (
@@ -65,6 +129,10 @@ function ManagerPassengersView() {
           </TouchableOpacity>
         ) : null}
       </View>
+
+      {groups.length > 0 ? (
+        <GroupChips groups={groups} selectedGroupId={selectedGroupId} onSelect={setSelectedGroupId} />
+      ) : null}
 
       <Card style={styles.listCard}>
         {loading && passengers.length === 0 ? (
@@ -75,7 +143,17 @@ function ManagerPassengersView() {
             keyExtractor={(item) => item._id}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
-            ListEmptyComponent={<EmptyState message={error ?? 'Sin pasajeros registrados'} icon="people-outline" />}
+            ListEmptyComponent={
+              <EmptyState
+                message={
+                  error ??
+                  (selectedGroup
+                    ? `Este grupo todavía no tiene pasajeros. Comparte el código ${selectedGroup.code} para que se unan.`
+                    : 'Sin pasajeros registrados')
+                }
+                icon="people-outline"
+              />
+            }
             renderItem={({ item }) => (
               <PassengerListItem
                 passenger={item}
@@ -249,6 +327,16 @@ export default function PassengersScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background, padding: SPACING.md },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
+  chipsScroll: { flexGrow: 0, marginBottom: SPACING.md },
+  chips: { gap: SPACING.sm, paddingRight: SPACING.md },
+  chip: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, maxWidth: 220,
+    backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.border,
+  },
+  chipSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  chipText: { fontSize: FONT_SIZE.sm, fontWeight: '700', color: COLORS.text },
+  chipTextSelected: { color: '#fff' },
+  chipHint: { fontSize: FONT_SIZE.xs, fontWeight: '600', opacity: 0.7 },
   headerTitle: { fontSize: FONT_SIZE.xl, fontWeight: '800', color: COLORS.text },
   headerSubtitle: { fontSize: FONT_SIZE.sm, color: COLORS.textMuted, marginTop: 2 },
   addBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },

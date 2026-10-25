@@ -14,8 +14,10 @@ axiosPassenger.interceptors.request.use((config) => {
     return config;
 });
 
-export const getPassengers = () =>
-    axiosPassenger.get('/passengers');
+// GET /api/v1/passengers[?groupId=]  — con groupId, solo los pasajeros de ese grupo
+// (ADMIN o el DRIVER dueño del grupo)
+export const getPassengers = (groupId) =>
+    axiosPassenger.get('/passengers', { params: groupId ? { groupId } : undefined });
 
 // GET /api/v1/passengers/me  — perfil de pasajero del usuario, con su grupo
 export const getMyPassenger = () =>

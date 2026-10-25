@@ -112,7 +112,17 @@ paths:
         - "ADMIN_ROLE" y "DRIVER_ROLE": todos los pasajeros con "isActive = true".
         - "USER_ROLE" y "PASSENGER_ROLE": solo los compañeros de su grupo activo, con
           "_id", "name" y "groupId" (sin cuenta, asistencia ni motivos de ausencia).
-          Lista vacía si no pertenece a un grupo activo.
+          Lista vacía si no pertenece a un grupo activo. Para ellos "groupId" se ignora.
+      parameters:
+        - name: groupId
+          in: query
+          required: false
+          description: |
+            Solo ADMIN/DRIVER: devuelve únicamente los pasajeros de ese grupo (ordenados
+            por nombre). Un conductor solo puede pedir sus propios grupos (403 si no).
+          schema:
+            type: string
+            example: 661f2b3c4e5d6f7a8b9c0d1e
       responses:
         '200':
           description: Lista de pasajeros activos

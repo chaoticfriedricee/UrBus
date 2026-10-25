@@ -599,3 +599,57 @@ test('varias uniones simultáneas de una cuenta sin perfil crean un solo perfil'
     assert.ok(results.every((r) => r.status === 200 || r.status === 409));
     assert.equal(await Passenger.countDocuments({ userId: 'nuevo', isActive: true }), 1);
 });
+
+// ── Lista de pasajeros filtrada por grupo ─────────────────────────────────────
+
+test('el conductor elige qué grupo de pasajeros ver con ?groupId', async () => {
+    const morning = await createGroup(DRIVER_A, 'Mañana');
+    const afternoon = await createGroup(DRIVER_A, 'Tarde');
+    const empty = await createGroup(DRIVER_A, 'Vacío');
+
+    const beto = await linkPassenger('beto', 'Beto');
+    const ana = await linkPassenger('ana', 'Ana');
+    const carla = await linkPassenger('carla', 'Carla');
+    await linkPassenger('sin-grupo', 'Sin grupo');
+    await request('POST', '/groups/join', { token: beto.token, body: { code: morning.code } });
+    await request('POST', '/groups/join', { token: ana.token, body: { code: morning.code } });
+    await request('POST', '/groups/join', { token: carla.token, body: { code: afternoon.code } });
+
+    const names = async (group, token = DRIVER_A) => {
+        const res = await request('GET', `/passengers?groupId=${group._id}`, { token });
+        assert.equal(res.status, 200);
+        return res.body.data.map((p) => p.name);
+    };
+    assert.deepEqual(await names(morning), ['Ana', 'Beto']);
+    assert.deepEqual(await names(afternoon), ['Carla']);
+    assert.deepEqual(await names(empty), []);
+    assert.deepEqual(await names(morning, ADMIN), ['Ana', 'Beto']);
+
+    // Sin filtro se conserva la lista completa
+    assert.equal((await request('GET', '/passengers', { token: DRIVER_A })).body.data.length, 4);
+
+    // Un grupo inactivo del propio conductor también se puede consultar
+    await request('PATCH', `/groups/${afternoon._id}`, { token: DRIVER_A, body: { isActive: false } });
+    assert.deepEqual(await names(afternoon), ['Carla']);
+});
+
+test('el filtro por grupo no deja ver grupos ajenos, eliminados o inválidos', async () => {
+    const foreign = await createGroup(DRIVER_B, 'Ajeno');
+    const passenger = await linkPassenger('dani', 'Dani');
+    await request('POST', '/groups/join', { token: passenger.token, body: { code: foreign.code } });
+
+    const other = await request('GET', `/passengers?groupId=${foreign._id}`, { token: DRIVER_A });
+    assert.equal(other.status, 403);
+    assert.equal(other.body.data, undefined);
+
+    const deleted = await createGroup(DRIVER_A, 'Eliminado');
+    await request('DELETE', `/groups/${deleted._id}`, { token: DRIVER_A });
+    assert.equal((await request('GET', `/passengers?groupId=${deleted._id}`, { token: DRIVER_A })).status, 404);
+
+    assert.equal((await request('GET', '/passengers?groupId=no-es-un-id', { token: DRIVER_A })).status, 400);
+    assert.equal((await request('GET', `/passengers?groupId=${foreign._id}&groupId=${deleted._id}`, { token: DRIVER_A })).status, 400);
+
+    // Un pasajero sigue viendo solo a su grupo, sin importar el filtro
+    const own = await request('GET', `/passengers?groupId=${deleted._id}`, { token: passenger.token });
+    assert.deepEqual(own.body.data.map((p) => p.name), ['Dani']);
+});
