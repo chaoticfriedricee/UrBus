@@ -142,10 +142,10 @@ paths:
       summary: Unirse a un grupo con su código
       operationId: joinGroup
       description: |
-        Solo "USER_ROLE" o "PASSENGER_ROLE" con un perfil de pasajero ya vinculado
-        (lo crea un admin o conductor). El grupo y su conductor se resuelven solo a
-        partir del código; cualquier groupId/driverId enviado se ignora. Un pasajero
-        pertenece a un solo grupo: unirse a otro lo cambia de grupo.
+        Solo "USER_ROLE" o "PASSENGER_ROLE". Si la cuenta no tiene perfil de pasajero,
+        se crea con "name" (o "Pasajero") y queda en el grupo del código. El grupo y su
+        conductor se resuelven solo a partir del código; cualquier groupId/driverId/userId
+        enviado se ignora. Un pasajero pertenece a un solo grupo: unirse a otro lo cambia.
       requestBody:
         required: true
         content:
@@ -158,6 +158,10 @@ paths:
                 code:
                   type: string
                   example: A3F9K2
+                name:
+                  type: string
+                  description: Nombre visible si hay que crear el perfil de pasajero
+                  example: Diego Pérez
       responses:
         '200':
           description: Unido al grupo
@@ -166,7 +170,7 @@ paths:
         '403':
           description: El rol no puede unirse a grupos
         '404':
-          description: Código inválido, grupo inactivo/eliminado o sin perfil de pasajero vinculado
+          description: Código inválido o grupo inactivo/eliminado
         '409':
           description: Ya pertenece a ese grupo (también si dos peticiones llegan a la vez)
 

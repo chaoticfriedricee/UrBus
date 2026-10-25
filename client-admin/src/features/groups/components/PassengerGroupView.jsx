@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useGroupStore } from '../store/groupStore.js';
+import { useAuthStore } from '../../auth/store/authStore.js';
 
 const CARD_STYLE = {
     background: '#fff',
@@ -11,6 +12,7 @@ const CARD_STYLE = {
 
 function JoinGroupCard({ currentGroup }) {
     const joinGroupByCode = useGroupStore((s) => s.joinGroupByCode);
+    const user            = useAuthStore((s) => s.user);
 
     const [code, setCode] = useState('');
     const [joining, setJoining] = useState(false);
@@ -23,7 +25,8 @@ function JoinGroupCard({ currentGroup }) {
         }
         setJoining(true);
         setFeedback(null);
-        const result = await joinGroupByCode(code.trim());
+        const displayName = [user?.name, user?.surname].filter(Boolean).join(' ') || user?.username;
+        const result = await joinGroupByCode(code.trim(), displayName);
         setJoining(false);
 
         if (result.success) {
@@ -118,23 +121,12 @@ export const PassengerGroupView = () => {
     // groupId llega poblado ({ name, code, isActive }) o null si no pertenece a ninguno
     const group = myPassenger?.groupId ?? null;
 
-    if (myPassengerLoading && !myPassenger) {
+    if (myPassengerLoading && !myPassenger && !notLinked) {
         return <p style={{ fontSize: 13, color: '#9ca3af' }}>Cargando...</p>;
     }
 
-    if (notLinked) {
-        return (
-            <div style={CARD_STYLE}>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: 15, color: '#374151' }}>
-                    Aún no estás vinculado como pasajero
-                </p>
-                <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>
-                    Pide a tu conductor o a un administrador que te registre; después podrás unirte con un código.
-                </p>
-            </div>
-        );
-    }
-
+    // JoinGroupCard queda siempre en la misma posición para que no se vuelva a montar
+    // (y conserve su mensaje de éxito) cuando cambia la tarjeta de arriba
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 560 }}>
             {group ? (
@@ -143,6 +135,9 @@ export const PassengerGroupView = () => {
                 <div style={CARD_STYLE}>
                     <p style={{ margin: 0, fontWeight: 700, fontSize: 15, color: '#374151' }}>
                         Todavía no perteneces a ningún grupo
+                    </p>
+                    <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>
+                        Ingresa abajo el código de tu bus para quedar asignado al grupo de tu conductor.
                     </p>
                 </div>
             )}

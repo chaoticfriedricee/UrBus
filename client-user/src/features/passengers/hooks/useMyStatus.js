@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import passengerClient from '../../../shared/api/passengerClient';
 import { joinGroup as joinGroupRequest } from '../../../shared/api/groupApi';
 import { getPassengers } from '../../../shared/api/passengerApi';
+import useAuthStore from '../../../shared/store/authStore';
 
 export function useMyStatus() {
     const [status, setStatus] = useState(null);
@@ -46,7 +47,9 @@ export function useMyStatus() {
     const joinGroup = useCallback(async (code) => {
         setLoading(true);
         try {
-            const response = await joinGroupRequest(code);
+            const { user } = useAuthStore.getState();
+            const displayName = [user?.name, user?.surname].filter(Boolean).join(' ') || user?.username;
+            const response = await joinGroupRequest(code, displayName);
             await fetchStatus();
             return { success: true, message: response.data?.message, data: response.data?.data };
         } catch (err) {

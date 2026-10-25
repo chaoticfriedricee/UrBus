@@ -276,7 +276,7 @@ Reglas:
 * El conductor de un grupo siempre es el usuario del token; no se puede asignar a otro.
 * El código se valida en el servidor y se resuelve al grupo y su conductor; los grupos inactivos o eliminados no aceptan pasajeros.
 * Un pasajero pertenece a **un solo grupo** a la vez (`Passenger.groupId`, tal como ya estaba en el esquema). Unirse de nuevo al mismo grupo responde 409; unirse a otro grupo lo cambia de grupo.
-* Para unirse, la cuenta debe tener un perfil de pasajero vinculado, que crea un administrador o conductor (modelo de aprobación existente).
+* Si la cuenta aún no tiene perfil de pasajero, unirse con un código válido lo crea (para la cuenta del token, con el `name` enviado o «Pasajero»): el código que comparte el conductor sirve como autorización. Un administrador o conductor también puede seguir creando perfiles desde `POST /passengers`.
 * Al arrancar se crean los índices únicos `groups.code`, `settings.key` y "un perfil de pasajero activo por `userId`" (`ensureIndexes` en `configs/db.js`).
 * **Límite de grupos:** cada conductor puede tener como máximo N grupos **activos** (los desactivados o eliminados no cuentan; reactivar uno vuelve a pasar por el límite). N es su límite propio si un administrador se lo asignó o, si no, el límite general guardado en la colección `settings` (2 si nunca se cambió). Se configura en client-admin → Grupos → «Límites por conductor».
 * Bajar un límite no elimina ni desactiva grupos ni membresías: solo impide crear o reactivar grupos hasta que el conductor tenga menos grupos activos que el límite.

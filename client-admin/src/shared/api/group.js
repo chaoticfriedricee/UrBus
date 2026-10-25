@@ -58,6 +58,7 @@ export const getGroupSettings = () =>
 export const updateGroupSettings = (data) =>
     axiosGroup.put('/groups/settings', data);
 
-// POST /api/v1/groups/join — requiere PASSENGER_ROLE o USER_ROLE
-export const joinGroup = (code) =>
-    axiosGroup.post('/groups/join', { code });
+// POST /api/v1/groups/join — requiere PASSENGER_ROLE o USER_ROLE. Si la cuenta aún no
+// tiene perfil de pasajero, se crea con `name` (el nombre que verá el conductor)
+export const joinGroup = (code, name) =>
+    axiosGroup.post('/groups/join', { code, name });

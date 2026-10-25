@@ -192,11 +192,33 @@ test('se rechaza unirse dos veces al mismo grupo', async () => {
     assert.equal(again.status, 409);
 });
 
-test('solo pasajeros con perfil vinculado pueden unirse; conductores y admins no', async () => {
+test('un pasajero sin perfil se vincula con el código; conductores y admins no pueden unirse', async () => {
     const group = await createGroup(DRIVER_A, 'Ruta');
 
-    const unlinked = await request('POST', '/groups/join', { token: tokenFor('sin-perfil', 'USER_ROLE'), body: { code: group.code } });
-    assert.equal(unlinked.status, 404);
+    const unlinked = await request('POST', '/groups/join', {
+        token: tokenFor('sin-perfil', 'PASSENGER_ROLE'),
+        body: { code: group.code, name: '  Diego Pérez  ', userId: 'otra-cuenta' }
+    });
+    assert.equal(unlinked.status, 200);
+    assert.equal(unlinked.body.data.profileCreated, true);
+    assert.equal(unlinked.body.message, 'Te uniste al grupo Ruta');
+
+    // El perfil es de la cuenta del token, no del userId enviado
+    const created = await Passenger.findOne({ userId: 'sin-perfil', isActive: true });
+    assert.equal(created.name, 'Diego Pérez');
+    assert.equal(String(created.groupId), group._id);
+    assert.equal(await Passenger.countDocuments({ userId: 'otra-cuenta' }), 0);
+
+    const me = await request('GET', '/passengers/me', { token: tokenFor('sin-perfil', 'PASSENGER_ROLE') });
+    assert.equal(me.body.data.groupId.name, 'Ruta');
+    const detail = await request('GET', `/groups/${group._id}`, { token: DRIVER_A });
+    assert.deepEqual(detail.body.data.passengers.map((p) => p.name), ['Diego Pérez']);
+
+    // Sin nombre válido se usa uno genérico; un código inválido no crea perfil
+    await request('POST', '/groups/join', { token: tokenFor('sin-nombre', 'USER_ROLE'), body: { code: group.code, name: { $ne: 1 } } });
+    assert.equal((await Passenger.findOne({ userId: 'sin-nombre' })).name, 'Pasajero');
+    assert.equal((await request('POST', '/groups/join', { token: tokenFor('sin-grupo', 'USER_ROLE'), body: { code: 'ZZZZZZ' } })).status, 404);
+    assert.equal(await Passenger.countDocuments({ userId: 'sin-grupo' }), 0);
 
     assert.equal((await request('POST', '/groups/join', { token: DRIVER_B, body: { code: group.code } })).status, 403);
     assert.equal((await request('POST', '/groups/join', { token: ADMIN, body: { code: group.code } })).status, 403);
@@ -563,4 +585,17 @@ test('unirse a otro grupo cambia la membresía (un pasajero pertenece a un solo 
     assert.equal(String((await Passenger.findById(passenger._id)).groupId), second._id);
     const firstDetail = await request('GET', `/groups/${first._id}`, { token: DRIVER_A });
     assert.deepEqual(firstDetail.body.data.passengers, []);
+});
+
+test('varias uniones simultáneas de una cuenta sin perfil crean un solo perfil', async () => {
+    const group = await createGroup(DRIVER_A, 'Ruta');
+    const token = tokenFor('nuevo', 'PASSENGER_ROLE');
+
+    const results = await Promise.all(
+        Array.from({ length: 5 }, () => request('POST', '/groups/join', { token, body: { code: group.code, name: 'Nuevo' } }))
+    );
+
+    assert.equal(results.filter((r) => r.status === 200).length, 1);
+    assert.ok(results.every((r) => r.status === 200 || r.status === 409));
+    assert.equal(await Passenger.countDocuments({ userId: 'nuevo', isActive: true }), 1);
 });

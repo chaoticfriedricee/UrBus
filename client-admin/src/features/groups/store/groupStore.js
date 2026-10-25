@@ -198,9 +198,9 @@ export const useGroupStore = create((set, get) => ({
 
     fetchMyPassenger: async () => {
         try {
-            set({ myPassengerLoading: true, notLinked: false });
+            set({ myPassengerLoading: true });
             const { data } = await getMyPassenger();
-            set({ myPassenger: data.data ?? null });
+            set({ myPassenger: data.data ?? null, notLinked: false });
         } catch (err) {
             if (err.response?.status === 404) {
                 set({ myPassenger: null, notLinked: true });
@@ -212,9 +212,9 @@ export const useGroupStore = create((set, get) => ({
         }
     },
 
-    joinGroupByCode: async (code) => {
+    joinGroupByCode: async (code, name) => {
         try {
-            const { data } = await joinGroup(code);
+            const { data } = await joinGroup(code, name);
             await get().fetchMyPassenger();
             return { success: true, group: data.data?.group };
         } catch (err) {

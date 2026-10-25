@@ -249,6 +249,11 @@ export const deleteGroup = async (req, res, next) => {
   }
 };
 
+const MAX_PASSENGER_NAME_LENGTH = 100;
+
+const passengerDisplayName = (name) =>
+  (typeof name === 'string' && name.trim().slice(0, MAX_PASSENGER_NAME_LENGTH)) || 'Pasajero';
+
 export const joinGroup = async (req, res, next) => {
   try {
 
@@ -282,24 +287,38 @@ export const joinGroup = async (req, res, next) => {
     // Un pasajero pertenece a un solo grupo (groupId); unirse a otro lo cambia de grupo.
     // La condición groupId != grupo hace la asignación atómica: dos peticiones
     // simultáneas con el mismo código no pueden "unirlo dos veces"
-    const passenger = await Passenger.findOneAndUpdate(
+    const assignToGroup = () => Passenger.findOneAndUpdate(
       { userId: req.user.id, isActive: true, groupId: { $ne: group._id } },
       { $set: { groupId: group._id } },
       { new: true }
     );
 
-    if (!passenger) {
-      const linked = await Passenger.exists({ userId: req.user.id, isActive: true });
+    let passenger = await assignToGroup();
+    let profileCreated = false;
 
-      return linked
-        ? res.status(409).json({
-          success: false,
-          message: `Ya perteneces al grupo ${group.name}`
-        })
-        : res.status(404).json({
-          success: false,
-          message: 'No tienes un perfil de pasajero vinculado'
+    if (!passenger && !(await Passenger.exists({ userId: req.user.id, isActive: true }))) {
+      // Sin perfil de pasajero: el código del conductor sirve como autorización y
+      // el perfil se crea aquí, siempre para la cuenta del token. El nombre es solo
+      // el que se muestra en la lista del conductor (él puede corregirlo)
+      try {
+        passenger = await Passenger.create({
+          name: passengerDisplayName(req.body.name),
+          userId: req.user.id,
+          groupId: group._id
         });
+        profileCreated = true;
+      } catch (err) {
+        if (err.code !== 11000) throw err;
+        // Otra petición simultánea creó el perfil (índice único por userId activo)
+        passenger = await assignToGroup();
+      }
+    }
+
+    if (!passenger) {
+      return res.status(409).json({
+        success: false,
+        message: `Ya perteneces al grupo ${group.name}`
+      });
     }
 
     res.status(200).json({
@@ -307,7 +326,8 @@ export const joinGroup = async (req, res, next) => {
       message: `Te uniste al grupo ${group.name}`,
       data: {
         group: { _id: group._id, name: group.name, code: group.code, isActive: group.isActive },
-        passenger: { _id: passenger._id, name: passenger.name, groupId: passenger.groupId }
+        passenger: { _id: passenger._id, name: passenger.name, groupId: passenger.groupId },
+        profileCreated
       }
     });
 

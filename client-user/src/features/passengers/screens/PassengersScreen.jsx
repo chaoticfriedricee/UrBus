@@ -108,10 +108,10 @@ function ManagerPassengersView() {
   );
 }
 
-function JoinGroupCard({ loading, currentGroup, onJoin }) {
+// feedback vive en el padre: tras unirse la vista cambia y esta tarjeta se vuelve a montar
+function JoinGroupCard({ loading, currentGroup, onJoin, feedback, setFeedback }) {
   const [code, setCode] = useState('');
   const [joining, setJoining] = useState(false);
-  const [feedback, setFeedback] = useState(null);
 
   const handleJoin = async () => {
     if (!code.trim()) {
@@ -184,6 +184,7 @@ function MyGroupCard({ group, mates }) {
 function MyStatusView() {
   const { status, loading, error, notLinked, groupMates, fetchStatus, joinGroup } = useMyStatus();
   const [refreshing, setRefreshing] = useState(false);
+  const [joinFeedback, setJoinFeedback] = useState(null);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
@@ -212,9 +213,8 @@ function MyStatusView() {
       {loading && !status ? (
         <LoadingSpinner />
       ) : notLinked ? (
-        <Card style={styles.statusCard}>
-          <EmptyState message="Aún no estás vinculado como pasajero. Contacta al administrador." icon="info-outline" />
-        </Card>
+        // Sin perfil de pasajero todavía: al unirse con el código del conductor se crea
+        <JoinGroupCard loading={loading} currentGroup={null} onJoin={joinGroup} feedback={joinFeedback} setFeedback={setJoinFeedback} />
       ) : error && !status ? (
         <Card style={styles.statusCard}>
           <EmptyState message={error} />
@@ -232,7 +232,7 @@ function MyStatusView() {
 
           {group ? <MyGroupCard group={group} mates={groupMates} /> : null}
           {/* Siempre visible: un pasajero pertenece a un solo grupo y unirse a otro lo cambia */}
-          <JoinGroupCard loading={loading} currentGroup={group} onJoin={joinGroup} />
+          <JoinGroupCard loading={loading} currentGroup={group} onJoin={joinGroup} feedback={joinFeedback} setFeedback={setJoinFeedback} />
         </>
       )}
     </ScrollView>
