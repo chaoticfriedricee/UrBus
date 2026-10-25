@@ -7,6 +7,7 @@ const { authLimiter } = require('../../configs/rateLimit.configuration');
 const {
   registerValidator,
   loginValidator,
+  refreshTokenValidator,
   verifyEmailValidator,
   resendVerificationValidator,
   forgotPasswordValidator,
@@ -17,6 +18,9 @@ const router = express.Router();
 
 // POST /api/v1/auth/login
 router.post('/login', authLimiter, loginValidator, validate, authController.login);
+
+// POST /api/v1/auth/refresh
+router.post('/refresh', refreshTokenValidator, validate, authController.refresh);
 
 // POST /api/v1/auth/register (multipart/form-data, límite de 10MB como en [RequestSizeLimit] .NET)
 router.post(

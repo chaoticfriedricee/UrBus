@@ -18,6 +18,12 @@ const login = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
+// POST /api/v1/auth/refresh
+const refresh = asyncHandler(async (req, res) => {
+  const result = await authService.refreshTokenAsync(req.body.refreshToken);
+  res.status(200).json(result);
+});
+
 // POST /api/v1/auth/register (multipart/form-data)
 const register = asyncHandler(async (req, res) => {
   const result = await authService.registerAsync(req.body, req.file);
@@ -59,6 +65,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 
 module.exports = {
   login,
+  refresh,
   register,
   verifyEmail,
   resendVerification,

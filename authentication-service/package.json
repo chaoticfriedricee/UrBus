@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "db:seed": "node src/database/seed.js"
+    "db:seed": "node src/database/seed.js",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\""
   },
   "engines": {
     "node": ">=18.0.0"

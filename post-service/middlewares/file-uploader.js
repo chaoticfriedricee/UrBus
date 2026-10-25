@@ -47,7 +47,9 @@ const createCloudinaryUploader = (folder) => {
       if (MIMETYPES.includes(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(new Error(`Solo se permiten imágenes: ${MIMETYPES.join(", ")}`));
+        const err = new Error(`Solo se permiten imágenes: ${MIMETYPES.join(", ")}`);
+        err.statusCode = 400;
+        cb(err);
       }
     },
     limits: {

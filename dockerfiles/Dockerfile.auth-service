@@ -1,20 +1,15 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
+FROM node:22-alpine
 
-COPY authentication-service/AuthenticationService.sln ./
-COPY authentication-service/src/AuthenticationService.Domain/ src/AuthenticationService.Domain/
-COPY authentication-service/src/AuthenticationService.Persistence/ src/AuthenticationService.Persistence/
-COPY authentication-service/src/AuthenticationService.Application/ src/AuthenticationService.Application/
-COPY authentication-service/src/AuthenticationService.Api/ src/AuthenticationService.Api/
-
-RUN dotnet restore AuthenticationService.sln
-RUN dotnet publish src/AuthenticationService.Api -c Release -o /app/publish --no-restore
-
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
-COPY --from=build /app/publish .
 
-ENV ASPNETCORE_ENVIRONMENT=Production
-EXPOSE 8080
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
-ENTRYPOINT ["sh", "-c", "ASPNETCORE_URLS=http://+:${PORT:-8080} dotnet AuthenticationService.Api.dll"]
+COPY authentication-service/package.json authentication-service/pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile
+
+COPY authentication-service/ .
+
+ENV NODE_ENV=production
+EXPOSE 5166
+
+CMD ["node", "index.js"]

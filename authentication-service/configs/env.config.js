@@ -32,6 +32,8 @@ const config = {
     user: process.env.DB_USER || 'UrBus',
     password: process.env.DB_PASSWORD || '',
     logging: toBool(process.env.DB_LOGGING, false),
+    // SSL activo por defecto en producción; DB_SSL=false para un Postgres local (Docker)
+    ssl: toBool(process.env.DB_SSL, process.env.NODE_ENV === 'production'),
   },
 
   jwt: {
@@ -39,6 +41,7 @@ const config = {
     issuer: process.env.JWT_ISSUER || 'UrBus',
     audience: process.env.JWT_AUDIENCE || 'UrBus',
     expirationMinutes: parseInt(process.env.JWT_EXPIRATION_MINUTES, 10) || 60,
+    refreshExpirationDays: parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS, 10) || 7,
   },
 
   cloudinary: {

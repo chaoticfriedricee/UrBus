@@ -35,7 +35,11 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "UrBus necesita tu ubicación para transmitir la ruta del bus en tiempo real."
+          "locationAlwaysAndWhenInUsePermission": "UrBus necesita tu ubicación, también en segundo plano, para transmitir la ruta del bus en tiempo real aunque cambies de app o bloquees la pantalla.",
+          "locationWhenInUsePermission": "UrBus necesita tu ubicación para transmitir la ruta del bus en tiempo real.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true
         }
       ]
     ]

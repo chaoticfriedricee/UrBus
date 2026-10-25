@@ -111,9 +111,6 @@ StyleCopReport.xml
 *.VC.db
 *.VC.VC.opendb
 
-# WhatsApp Web session
-.wwebjs_auth/
-.wwebjs_cache/
 
 # Zip files
 client-admin.zip

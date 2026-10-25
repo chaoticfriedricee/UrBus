@@ -29,15 +29,19 @@ const registerValidator = [
  * Equivalente a LoginDto.cs
  */
 const loginValidator = [
-  body('emailOrUsername').notEmpty().withMessage('emailOrUsername es requerido'),
-  body('password').notEmpty().withMessage('password es requerido'),
+  body('emailOrUsername').isString().withMessage('emailOrUsername debe ser texto').notEmpty().withMessage('emailOrUsername es requerido'),
+  body('password').isString().withMessage('password debe ser texto').notEmpty().withMessage('password es requerido'),
+];
+
+const refreshTokenValidator = [
+  body('refreshToken').isString().withMessage('refreshToken debe ser texto').notEmpty().withMessage('refreshToken es requerido'),
 ];
 
 /**
  * Equivalente a Email/VerifyEmailDto.cs
  */
 const verifyEmailValidator = [
-  body('token').notEmpty().withMessage('token es requerido'),
+  body('token').isString().withMessage('token debe ser texto').notEmpty().withMessage('token es requerido'),
 ];
 
 /**
@@ -58,8 +62,8 @@ const forgotPasswordValidator = [
  * Equivalente a Email/ResetPasswordDto.cs
  */
 const resetPasswordValidator = [
-  body('token').notEmpty().withMessage('token es requerido'),
-  body('newPassword').isLength({ min: 8 }).withMessage('La nueva contraseña debe tener al menos 8 caracteres'),
+  body('token').isString().withMessage('token debe ser texto').notEmpty().withMessage('token es requerido'),
+  body('newPassword').isString().withMessage('newPassword debe ser texto').isLength({ min: 8 }).withMessage('La nueva contraseña debe tener al menos 8 caracteres'),
 ];
 
 /**
@@ -84,6 +88,7 @@ const getUsersByRoleValidator = [
 module.exports = {
   registerValidator,
   loginValidator,
+  refreshTokenValidator,
   verifyEmailValidator,
   resendVerificationValidator,
   forgotPasswordValidator,

@@ -26,6 +26,12 @@ const postSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    // Grupo de passenger-service al que va dirigido. null = aviso general (visible para todos)
+    groupId: {
+        type: String,
+        default: null,
+        index: true
+    },
     isDeleted: {
         type: Boolean,
         default: false

@@ -23,6 +23,8 @@ servers:
 tags:
   - name: Passengers
     description: Gestión de pasajeros
+  - name: Groups
+    description: Grupos de pasajeros de cada conductor
   - name: Health
     description: Estado del servicio
 
@@ -106,7 +108,21 @@ paths:
         - Passengers
       summary: Listar pasajeros activos
       operationId: getPassengers
-      description: Retorna todos los pasajeros con "isActive = true". Requiere "ADMIN_ROLE" o "DRIVER_ROLE".
+      description: |
+        - "ADMIN_ROLE" y "DRIVER_ROLE": todos los pasajeros con "isActive = true".
+        - "USER_ROLE" y "PASSENGER_ROLE": solo los compañeros de su grupo activo, con
+          "_id", "name" y "groupId" (sin cuenta, asistencia ni motivos de ausencia).
+          Lista vacía si no pertenece a un grupo activo. Para ellos "groupId" se ignora.
+      parameters:
+        - name: groupId
+          in: query
+          required: false
+          description: |
+            Solo ADMIN/DRIVER: devuelve únicamente los pasajeros de ese grupo (ordenados
+            por nombre). Un conductor solo puede pedir sus propios grupos (403 si no).
+          schema:
+            type: string
+            example: 661f2b3c4e5d6f7a8b9c0d1e
       responses:
         '200':
           description: Lista de pasajeros activos
@@ -128,6 +144,233 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/InternalError'
+
+  /groups/join:
+    post:
+      tags:
+        - Groups
+      summary: Unirse a un grupo con su código
+      operationId: joinGroup
+      description: |
+        Solo "USER_ROLE" o "PASSENGER_ROLE". Si la cuenta no tiene perfil de pasajero,
+        se crea con "name" (o "Pasajero") y queda en el grupo del código. El grupo y su
+        conductor se resuelven solo a partir del código; cualquier groupId/driverId/userId
+        enviado se ignora. Un pasajero pertenece a un solo grupo: unirse a otro lo cambia.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - code
+              properties:
+                code:
+                  type: string
+                  example: A3F9K2
+                name:
+                  type: string
+                  description: Nombre visible si hay que crear el perfil de pasajero
+                  example: Diego Pérez
+      responses:
+        '200':
+          description: Unido al grupo
+        '400':
+          description: Código vacío o no es texto
+        '403':
+          description: El rol no puede unirse a grupos
+        '404':
+          description: Código inválido o grupo inactivo/eliminado
+        '409':
+          description: Ya pertenece a ese grupo (también si dos peticiones llegan a la vez)
+
+  /groups:
+    post:
+      tags:
+        - Groups
+      summary: Crear un grupo (conductor)
+      operationId: createGroup
+      description: |
+        Solo "DRIVER_ROLE". El dueño es siempre el conductor del token y el código
+        de unión se genera en el servidor (driverId/code del body se ignoran).
+        Se rechaza si el conductor ya tiene tantos grupos activos como su límite
+        efectivo (el propio asignado por un admin o, si no tiene, el general;
+        por defecto 2). Los grupos inactivos o eliminados no cuentan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Ruta mañana
+      responses:
+        '201':
+          description: Grupo creado con su código único
+        '400':
+          description: Nombre vacío o no es texto
+        '403':
+          description: El rol no es conductor, o se alcanzó el límite de grupos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Alcanzaste el límite de 2 grupos activos por conductor. Desactiva o elimina un grupo, o solicita a un administrador un límite mayor
+                error: GROUP_LIMIT_REACHED
+                data:
+                  maxGroups: 2
+                  activeGroups: 2
+
+  /groups/settings:
+    get:
+      tags:
+        - Groups
+      summary: Configuración general de grupos (admin)
+      operationId: getGroupSettings
+      responses:
+        '200':
+          description: Configuración actual
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  maxGroupsPerDriver: 2
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags:
+        - Groups
+      summary: Cambiar el límite general de grupos por conductor (admin)
+      operationId: updateGroupSettings
+      description: |
+        Aplica a los conductores sin un límite propio. Bajarlo no elimina grupos
+        existentes: solo impide crear o reactivar más hasta quedar por debajo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - maxGroupsPerDriver
+              properties:
+                maxGroupsPerDriver:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                  example: 3
+      responses:
+        '200':
+          description: Límite general actualizado
+        '400':
+          description: No es un entero entre 0 y 100
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /groups/limit/me:
+    get:
+      tags:
+        - Groups
+      summary: Límite efectivo del conductor del token
+      operationId: getMyGroupLimit
+      responses:
+        '200':
+          description: Límite y grupos activos
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  driverId: d1r2v3r4
+                  maxGroups: 2
+                  isCustom: false
+                  defaultMaxGroups: 2
+                  activeGroups: 1
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /groups/limit/{driverId}:
+    parameters:
+      - name: driverId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Groups
+      summary: Límite efectivo de un conductor (admin o el propio conductor)
+      operationId: getGroupLimit
+      responses:
+        '200':
+          description: Igual que /groups/limit/me
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags:
+        - Groups
+      summary: Asignar un límite propio a un conductor (admin)
+      operationId: setGroupLimit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - maxGroups
+              properties:
+                maxGroups:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+      responses:
+        '200':
+          description: Límite asignado
+        '400':
+          description: No es un entero entre 0 y 100
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags:
+        - Groups
+      summary: Quitar el límite propio; el conductor vuelve al general (admin)
+      operationId: resetGroupLimit
+      responses:
+        '200':
+          description: El conductor usa el límite general
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /groups/access:
+    get:
+      tags:
+        - Groups
+      summary: Acceso a grupos del usuario del token
+      operationId: getGroupAccess
+      description: |
+        Uso interno de post-service y location-service, que reenvían el token del
+        usuario. Exento del rate limit global.
+      responses:
+        '200':
+          description: Acceso del usuario
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  userId: a1b2c3d4e5f6g7h8
+                  role: USER_ROLE
+                  ownedGroupIds: []
+                  memberGroupId: 661f2b3c4e5d6f7a8b9c0d1e
+                  driverId: d1r2v3r4
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /passengers/{id}/status:
     patch:

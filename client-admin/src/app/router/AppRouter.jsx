@@ -4,8 +4,10 @@ import { ProtectedRoute } from './ProtecterRoute.jsx';
 import { RoleGuard } from './RoleGuard.jsx';
 import { AuthPage } from '../../features/auth/pages/AuthPage.jsx';
 import { VerifyEmailPage } from '../../features/auth/pages/VerifyEmailPage.jsx';
+import { ResetPasswordPage } from '../../features/auth/pages/ResetPasswordPage.jsx';
 import { LocationPage } from '../../features/location/pages/LocationPage.jsx';
 import { PassengerListPage } from '../../features/passangers/pages/PassengerListPage.jsx';
+import { GroupListPage } from '../../features/groups/pages/GroupListPage.jsx';
 import { PostListPage } from '../../features/post/pages/PostListPage.jsx';
 import { UserListPage } from '../../features/users/pages/UserListPage.jsx';
 
@@ -18,7 +20,7 @@ export const AppRouter = () => {
       <Route path='/auth/register' element={<AuthPage />} />
 
       <Route path='/verify-email' element={<VerifyEmailPage />} />
-      {/* <Route path='/reset-password' element={<ResetPasswordPage />} /> */}
+      <Route path='/reset-password' element={<ResetPasswordPage />} />
 
       <Route
         path='/dashboard'
@@ -31,6 +33,15 @@ export const AppRouter = () => {
         <Route index element={<LocationPage />} />
         <Route path='location' element={<LocationPage />} />
         <Route path='passengers' element={<PassengerListPage />} />
+        <Route
+          path='groups'
+          element={
+            // Cada rol ve su propia vista: admin (todos + límites), conductor (los suyos), pasajero (unirse)
+            <RoleGuard allowedRoles={['ADMIN_ROLE', 'DRIVER_ROLE', 'PASSENGER_ROLE', 'USER_ROLE']}>
+              <GroupListPage />
+            </RoleGuard>
+          }
+        />
         <Route path='posts' element={<PostListPage />} />
         <Route
           path='users'

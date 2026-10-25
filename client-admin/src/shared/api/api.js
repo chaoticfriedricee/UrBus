@@ -56,6 +56,53 @@ function _processQueue(_error, token = null) {
     failedQueue = [];
 }
 
+/**
+ * Renueva el access token con el refresh token. Si ya hay una renovación en curso, espera
+ * esa misma. Si no se puede renovar, cierra la sesión. Lo usan los interceptores HTTP y el
+ * socket de ubicación (que no pasa por axios).
+ */
+const refreshAccessToken = async function () {
+    if(_isRefreshing){
+        return new Promise(function (resolve, reject) {
+            failedQueue.push({ resolve, reject });
+        });
+    }
+
+    _isRefreshing = true;
+
+    const useAuthStore = await getAuthStore();
+    const refreshToken = useAuthStore.getState().refreshToken;
+
+    try{
+        if(!refreshToken){
+            const missing = new Error('No hay refresh token disponible');
+            missing.code = 'NO_REFRESH_TOKEN';
+            throw missing;
+        }
+
+        const response = await axiosAuth.post('/auth/refresh', { refreshToken });
+        const { token, refreshToken: newRefreshToken, expiresAt, userDetails } = response.data;
+
+        useAuthStore.setState({
+            token: token,
+            refreshToken: newRefreshToken,
+            expiresAt: expiresAt,
+            // userDetails solo trae id/username/foto/rol: se mezcla para no perder nombre, teléfono, etc.
+            user: { ...useAuthStore.getState().user, ...userDetails },
+            isAuthenticated: true,
+        });
+
+        _processQueue(null, token);
+        return token;
+    }catch(err){
+        _processQueue(err, null);
+        useAuthStore.getState().logout();
+        throw err;
+    }finally{
+        _isRefreshing = false;
+    }
+}
+
 const handleRefreshToken = async function (_error) {
     const _original = _error.config;
 
@@ -63,7 +110,6 @@ const handleRefreshToken = async function (_error) {
         return Promise.reject(_error);
     }
 
-    const useAuthStore = await getAuthStore();
     const status = _error.response?.status;
     const errorCode = _error.response?.data?.error;
     const requestUrl = _original.url || '';
@@ -73,51 +119,19 @@ const handleRefreshToken = async function (_error) {
     const shouldRefresh = shouldAttemptRefresh || shouldAttemptRefreshFrom403;
 
     if(shouldRefresh){
-        const retryClient = _original._axiosClient === 'admin' ? axiosAdmin : axiosAuth;
-
-        if(_isRefreshing){
-            return new Promise(function (resolve, reject) {
-                failedQueue.push({ resolve, reject });
-            }).then((token) => {
-                _original.headers['Authorization'] = 'Bearer ' + token;
-
-                return retryClient(_original);
-            }).catch((err) => Promise.reject(err));
-        }
+        const retryClient = _original._retryClient
+            || (_original._axiosClient === 'admin' ? axiosAdmin : axiosAuth);
 
         _original._retry = true;
-        _isRefreshing = true;
-
-        const refreshToken = useAuthStore.getState().refreshToken;
-
-        if(!refreshToken){
-            useAuthStore.getState().logout();
-
-            return Promise.reject(_error);
-        }
 
         try{
-            const response = await axiosAuth.post('/auth/refresh', { refreshToken });
-            const { token, refreshToken: newRefreshToken, expiresAt, userDetails } = response.data;
-
-            useAuthStore.setState({
-                token: token,
-                refreshToken: newRefreshToken,
-                expiresAt: expiresAt,
-                user: userDetails || useAuthStore.getState().user,
-                isAuthenticated: true,
-            });
-
-            _processQueue(null, token);
+            const token = await refreshAccessToken();
             _original.headers['Authorization'] = 'Bearer ' + token;
 
             return retryClient(_original);
         }catch(err){
-            _processQueue(err, null);
-            useAuthStore.getState().logout();
-            return Promise.reject(err);
-        }finally{
-            _isRefreshing = false;
+            // Sin refresh token se conserva el error original de la petición
+            return Promise.reject(err?.code === 'NO_REFRESH_TOKEN' ? _error : err);
         }
     }
 
@@ -127,6 +141,18 @@ const handleRefreshToken = async function (_error) {
 axiosAuth.interceptors.response.use((res) => res, handleRefreshToken);
 axiosAdmin.interceptors.response.use((res) => res, handleRefreshToken);
 
+// Conecta la renovación automática del token a los clientes de los otros
+// servicios (pasajeros, grupos, posts). Sin esto, al vencer el access token
+// esas llamadas quedaban respondiendo 401 hasta volver a iniciar sesión.
+const withTokenRefresh = (instance) => {
+    instance.interceptors.request.use((config) => {
+        config._retryClient = instance;
+        return config;
+    });
+    instance.interceptors.response.use((res) => res, handleRefreshToken);
+    return instance;
+};
+
 // ------
 
-export { axiosAuth, axiosAdmin };
+export { axiosAuth, axiosAdmin, withTokenRefresh, refreshAccessToken };

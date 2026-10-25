@@ -33,12 +33,14 @@ function buildHtml(initialLat, initialLng, initialZoom) {
     let marker = null;
     let destinationMarker = null;
 
-    function setMarker(lat, lng, title, description) {
+    function setMarker(lat, lng, title, description, opacity) {
       if (marker) {
         marker.setLatLng([lat, lng]);
       } else {
         marker = L.marker([lat, lng]).addTo(map);
       }
+      // Atenuado cuando es solo la última ubicación conocida
+      marker.setOpacity(typeof opacity === 'number' ? opacity : 1);
       if (title || description) {
         marker.bindPopup('<b>' + (title || '') + '</b><br/>' + (description || ''));
       }
@@ -77,7 +79,7 @@ function buildHtml(initialLat, initialLng, initialZoom) {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'SET_MARKER') {
-          setMarker(data.lat, data.lng, data.title, data.description);
+          setMarker(data.lat, data.lng, data.title, data.description, data.opacity);
         } else if (data.type === 'REMOVE_MARKER') {
           removeMarker();
         } else if (data.type === 'SET_DESTINATION') {
@@ -98,7 +100,7 @@ function buildHtml(initialLat, initialLng, initialZoom) {
 /**
  * Props:
  * - region: { latitude, longitude, latitudeDelta, longitudeDelta }
- * - marker: { latitude, longitude, title, description } | null
+ * - marker: { latitude, longitude, title, description, opacity? } | null
  * - destination: { latitude, longitude, title, description } | null (marcador fijo, ej. Kinal)
  * - style: estilos del contenedor
  */
@@ -120,12 +122,13 @@ export default function OSMMapView({ region, marker, destination, style }) {
           lng: marker.longitude,
           title: marker.title,
           description: marker.description,
+          opacity: marker.opacity,
         })
       );
     } else {
       webviewRef.current.postMessage(JSON.stringify({ type: 'REMOVE_MARKER' }));
     }
-  }, [marker?.latitude, marker?.longitude, marker?.title, marker?.description]);
+  }, [marker?.latitude, marker?.longitude, marker?.title, marker?.description, marker?.opacity]);
 
   useEffect(() => {
     if (!webviewRef.current) return;

@@ -1,27 +1,36 @@
 // src/features/passengers/hooks/usePassengers.js
 // Gestión de la lista de pasajeros — función portada de client-admin
 // (features/passangers/store/passengerStore.js). Disponible para DRIVER_ROLE y
-// ADMIN_ROLE; el toggle de estado también funciona para el propio pasajero.
-// Nota: el backend no expone edición de nombre, solo alta, baja y estado.
-import { useState, useCallback } from 'react';
-import { getPassengers, createPassenger, updatePassengerStatus, deletePassenger } from '../../../shared/api/passengerApi';
+// ADMIN_ROLE; el toggle de estado solo lo pueden usar ellos (no el pasajero).
+import { useState, useCallback, useRef } from 'react';
+import {
+  getPassengers, createPassenger, updatePassenger, updatePassengerStatus, setAbsenceReason, clearAbsenceReason, deletePassenger,
+} from '../../../shared/api/passengerApi';
 
 export function usePassengers() {
   const [passengers, setPassengers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Al cambiar de grupo rápido, solo se aplica la respuesta de la última petición
+  const lastRequest = useRef(0);
 
-  const fetchPassengers = useCallback(async () => {
+  // groupId opcional: solo los pasajeros de ese grupo. Devuelve el status HTTP del
+  // error para que la pantalla pueda volver a "Todos" si el grupo ya no existe
+  const fetchPassengers = useCallback(async (groupId = null) => {
+    const requestId = ++lastRequest.current;
+    const isLatest = () => requestId === lastRequest.current;
     setLoading(true);
     setError(null);
     try {
-      const response = await getPassengers();
+      const response = await getPassengers(groupId);
       const data = response.data.data ?? response.data;
-      setPassengers(Array.isArray(data) ? data : []);
+      if (isLatest()) setPassengers(Array.isArray(data) ? data : []);
+      return { success: true };
     } catch (err) {
-      setError(err.response?.data?.message ?? 'No se pudieron cargar los pasajeros');
+      if (isLatest()) setError(err.response?.data?.message ?? 'No se pudieron cargar los pasajeros');
+      return { success: false, status: err.response?.status };
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
   }, []);
 
@@ -66,7 +75,38 @@ export function usePassengers() {
     }
   }, [passengers]);
 
+  // El servidor devuelve el pasajero actualizado; se reemplaza en la lista
+  const replaceWith = useCallback(async (request, fallback) => {
+    try {
+      const response = await request();
+      const updated = response.data.data ?? response.data;
+      setPassengers((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.response?.data?.message ?? fallback };
+    }
+  }, []);
+
+  const editPassenger = useCallback(
+    (id, name) => replaceWith(() => updatePassenger(id, { name }), 'No se pudo editar el pasajero'),
+    [replaceWith]
+  );
+
+  // Registrar un motivo marca al pasajero como ausente (lo hace passenger-service)
+  const saveAbsenceReason = useCallback(
+    (id, reason, note) => replaceWith(() => setAbsenceReason(id, { reason, note }), 'No se pudo registrar el motivo de ausencia'),
+    [replaceWith]
+  );
+
+  const removeAbsenceReason = useCallback(
+    (id) => replaceWith(() => clearAbsenceReason(id), 'No se pudo quitar el motivo de ausencia'),
+    [replaceWith]
+  );
+
   const presentCount = passengers.filter((p) => p.status === 'PRESENT').length;
 
-  return { passengers, loading, error, presentCount, fetchPassengers, toggleStatus, addPassenger, removePassenger };
+  return {
+    passengers, loading, error, presentCount, fetchPassengers, toggleStatus, addPassenger, removePassenger,
+    editPassenger, saveAbsenceReason, removeAbsenceReason,
+  };
 }

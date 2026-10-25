@@ -1,12 +1,27 @@
 // src/features/passengers/hooks/useMyStatus.js
 import { useState, useCallback } from 'react';
 import passengerClient from '../../../shared/api/passengerClient';
+import { joinGroup as joinGroupRequest } from '../../../shared/api/groupApi';
+import { getPassengers } from '../../../shared/api/passengerApi';
+import useAuthStore from '../../../shared/store/authStore';
 
 export function useMyStatus() {
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [notLinked, setNotLinked] = useState(false);
+    // Compañeros del grupo: passenger-service solo devuelve los de tu grupo activo (nombre)
+    const [groupMates, setGroupMates] = useState([]);
+
+    const fetchGroupMates = useCallback(async () => {
+        try {
+            const response = await getPassengers();
+            const data = response.data.data ?? response.data;
+            setGroupMates(Array.isArray(data) ? data : []);
+        } catch {
+            setGroupMates([]);
+        }
+    }, []);
 
     const fetchStatus = useCallback(async () => {
         setLoading(true);
@@ -16,6 +31,8 @@ export function useMyStatus() {
         const response = await passengerClient.get('/passengers/me');
         const data = response.data.data ?? response.data;
         setStatus(data);
+        if (data?.groupId?.isActive) await fetchGroupMates();
+        else setGroupMates([]);
         } catch (err) {
         if (err.response?.status === 404) {
             setNotLinked(true);
@@ -25,24 +42,23 @@ export function useMyStatus() {
         } finally {
         setLoading(false);
         }
-    }, []);
+    }, [fetchGroupMates]);
 
-    const toggleStatus = useCallback(async () => {
-        if (!status) return;
+    const joinGroup = useCallback(async (code) => {
         setLoading(true);
-        setError(null);
         try {
-            const nextStatus = status.status === 'PRESENT' ? 'AUSENT' : 'PRESENT';
-            const passengerId = status._id ?? status.id;
-            const response = await passengerClient.patch(`/passengers/${passengerId}/status`, { status: nextStatus });
-            const data = response.data.data ?? response.data;
-            setStatus(data);
+            const { user } = useAuthStore.getState();
+            const displayName = [user?.name, user?.surname].filter(Boolean).join(' ') || user?.username;
+            const response = await joinGroupRequest(code, displayName);
+            await fetchStatus();
+            return { success: true, message: response.data?.message, data: response.data?.data };
         } catch (err) {
-            setError(err.response?.data?.message ?? 'No se pudo actualizar tu estado');
+            const msg = err.response?.data?.message ?? 'No se pudo unir al grupo';
+            return { success: false, error: msg };
         } finally {
             setLoading(false);
         }
-    }, [status]);
+    }, [fetchStatus]);
 
-    return { status, loading, error, notLinked, fetchStatus, toggleStatus };
+    return { status, loading, error, notLinked, groupMates, fetchStatus, joinGroup };
 }

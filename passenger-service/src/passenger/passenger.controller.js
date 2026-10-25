@@ -1,4 +1,7 @@
+import mongoose from 'mongoose';
 import Passenger from './passenger.model.js';
+import Group from '../group/group.model.js';
+import { findActiveMembership } from '../group/group.controller.js';
 
 export const createPassenger = async (req, res, next) => {
   try {
@@ -55,7 +58,65 @@ export const getPassengers = async (req, res, next) => {
       });
     }
 
-    const passengers = await Passenger.find({ isActive: true });
+    if (req.user.role === 'ADMIN_ROLE' || req.user.role === 'DRIVER_ROLE') {
+      const { groupId } = req.query;
+
+      // ?groupId=... muestra solo los pasajeros de ese grupo (el conductor elige cuál
+      // ver en ese momento); un conductor solo puede pedir los de sus propios grupos
+      if (groupId !== undefined) {
+        if (typeof groupId !== 'string' || !mongoose.isValidObjectId(groupId)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Grupo inválido'
+          });
+        }
+
+        const group = await Group.findOne({ _id: groupId, isDeleted: { $ne: true } });
+
+        if (!group) {
+          return res.status(404).json({
+            success: false,
+            message: 'Grupo no encontrado'
+          });
+        }
+
+        if (req.user.role === 'DRIVER_ROLE' && group.driverId !== req.user.id) {
+          return res.status(403).json({
+            success: false,
+            message: 'No tiene permisos sobre este grupo'
+          });
+        }
+
+        const passengers = await Passenger.find({ groupId: group._id, isActive: true }).sort({ name: 1 });
+
+        return res.status(200).json({
+          success: true,
+          data: passengers
+        });
+      }
+
+      const passengers = await Passenger.find({ isActive: true });
+
+      return res.status(200).json({
+        success: true,
+        data: passengers
+      });
+    }
+
+    // Un pasajero solo ve a los compañeros de su grupo activo, y solo su nombre
+    // (sin cuenta vinculada, asistencia ni motivos de ausencia)
+    const membership = await findActiveMembership(req.user.id);
+
+    if (!membership) {
+      return res.status(200).json({
+        success: true,
+        data: []
+      });
+    }
+
+    const passengers = await Passenger.find({ groupId: membership.group._id, isActive: true })
+      .select('name groupId')
+      .sort({ name: 1 });
 
     res.status(200).json({
       success: true,
@@ -70,7 +131,8 @@ export const getPassengers = async (req, res, next) => {
 export const getMyPassenger = async (req, res, next) => {
   try {
 
-    const passenger = await Passenger.findOne({ userId: req.user.id, isActive: true });
+    const passenger = await Passenger.findOne({ userId: req.user.id, isActive: true })
+      .populate('groupId', 'name code isActive');
 
     if (!passenger) {
       return res.status(404).json({
@@ -135,6 +197,48 @@ export const updatePassengerStatus = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Estado actualizado',
+      data: passenger
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updatePassenger = async (req, res, next) => {
+  try {
+
+    if (req.user.role !== 'ADMIN_ROLE' && req.user.role !== 'DRIVER_ROLE') {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para editar pasajeros'
+      });
+    }
+
+    const { name } = req.body;
+
+    if (typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre es obligatorio'
+      });
+    }
+
+    const passenger = await Passenger.findOne({ _id: req.params.id, isActive: true });
+
+    if (!passenger) {
+      return res.status(404).json({
+        success: false,
+        message: 'Pasajero no encontrado'
+      });
+    }
+
+    passenger.name = name.trim();
+    await passenger.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Pasajero actualizado',
       data: passenger
     });
 

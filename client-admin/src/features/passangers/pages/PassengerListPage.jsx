@@ -4,6 +4,8 @@ import { usePassengerStore } from '../store/passengerStore.js';
 import { PassengerCard } from '../components/PassengerCard.jsx';
 import { PassengerModal } from '../components/PassengerModal.jsx';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal.jsx';
+import { GroupFilter } from '../components/GroupFilter.jsx';
+import { useGroupStore } from '../../groups/store/groupStore.js';
 
 function SkeletonCard() {
     return (
@@ -21,7 +23,7 @@ function SkeletonCard() {
     );
 }
 
-function EmptyState({ onRefetch }) {
+function EmptyState({ onRefetch, title = 'Sin pasajeros registrados', hint = 'Crea el primero usando el botón de arriba' }) {
     return (
         <div style={{ textAlign: 'center', padding: '52px 20px' }}>
             <div style={{
@@ -36,10 +38,10 @@ function EmptyState({ onRefetch }) {
                 </svg>
             </div>
             <p style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#374151' }}>
-                Sin pasajeros registrados
+                {title}
             </p>
             <p style={{ margin: '0 0 20px', fontSize: 13, color: '#9ca3af' }}>
-                Crea el primero usando el botón de arriba
+                {hint}
             </p>
             <button
                 onClick={onRefetch}
@@ -58,16 +60,33 @@ function EmptyState({ onRefetch }) {
 export const PassengerListPage = () => {
     const user    = useAuthStore((s) => s.user);
     const isAdmin = user?.role === 'ADMIN_ROLE';
+    // Conductor y admin eligen qué grupo de pasajeros ver; un pasajero solo ve el suyo
+    const canFilter = isAdmin || user?.role === 'DRIVER_ROLE';
 
     const passengers      = usePassengerStore((s) => s.passengers);
     const loading         = usePassengerStore((s) => s.loading);
     const error           = usePassengerStore((s) => s.error);
     const fetchPassengers = usePassengerStore((s) => s.fetchPassengers);
     const getPresentCount = usePassengerStore((s) => s.getPresentCount);
+    const selectedGroupId = usePassengerStore((s) => s.selectedGroupId);
+    const selectGroup     = usePassengerStore((s) => s.selectGroup);
+
+    const groups      = useGroupStore((s) => s.groups);
+    const fetchGroups = useGroupStore((s) => s.fetchGroups);
 
     const [modal, setModal] = useState(null);
 
-    useEffect(() => { fetchPassengers(); }, [fetchPassengers]);
+    useEffect(() => {
+        // Una elección recordada de otra cuenta con otro rol no aplica aquí
+        if (!canFilter && selectedGroupId) selectGroup(null);
+        else fetchPassengers();
+        if (canFilter) fetchGroups();
+    }, [fetchPassengers, fetchGroups, canFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const selectedGroup = canFilter ? groups.find((g) => g._id === selectedGroupId) : null;
+    const countLabel = canFilter
+        ? `${getPresentCount()} de ${passengers.length} presentes`
+        : `${passengers.length} pasajeros`;
 
     return (
         <div style={{
@@ -93,9 +112,9 @@ export const PassengerListPage = () => {
                             ? 'Cargando...'
                             : error
                                 ? 'Error al cargar datos'
-                                : isAdmin
-                                    ? `${getPresentCount()} de ${passengers.length} presentes`
-                                    : `${passengers.length} pasajeros`}
+                                : selectedGroup
+                                    ? `${selectedGroup.name} · ${countLabel}`
+                                    : countLabel}
                     </p>
                 </div>
 
@@ -137,6 +156,14 @@ export const PassengerListPage = () => {
                 )}
             </div>
 
+            {canFilter && groups.length > 0 && (
+                <GroupFilter
+                    groups={groups}
+                    selectedGroupId={selectedGroup ? selectedGroupId : null}
+                    onSelect={selectGroup}
+                />
+            )}
+
             <div style={{
                 background: '#fff',
                 borderRadius: 20,
@@ -154,7 +181,15 @@ export const PassengerListPage = () => {
                         ))}
                     </>
                 ) : error || passengers.length === 0 ? (
-                    <EmptyState onRefetch={fetchPassengers} />
+                    selectedGroup && !error ? (
+                        <EmptyState
+                            onRefetch={fetchPassengers}
+                            title="Este grupo todavía no tiene pasajeros"
+                            hint={`Comparte el código ${selectedGroup.code} para que se unan`}
+                        />
+                    ) : (
+                        <EmptyState onRefetch={fetchPassengers} />
+                    )
                 ) : (
                     passengers.map((passenger, i) => (
                         <div key={passenger._id}>

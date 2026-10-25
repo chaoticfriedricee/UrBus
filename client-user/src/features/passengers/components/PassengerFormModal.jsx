@@ -1,7 +1,7 @@
 // src/features/passengers/components/PassengerFormModal.jsx
 // Modal para vincular un nuevo pasajero a una cuenta — portado de client-admin
-// (features/passangers/components/PassengerModal.jsx). Solo alta: el backend no
-// soporta editar un pasajero existente.
+// (features/passangers/components/PassengerModal.jsx). Solo alta: el nombre de un
+// pasajero existente se edita con PassengerNameModal.
 import React, { useState, useEffect } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';

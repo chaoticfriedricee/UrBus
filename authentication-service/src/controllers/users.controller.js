@@ -41,4 +41,24 @@ const verifyEmailByAdmin = asyncHandler(async (req, res) => {
   res.status(200).json(result);
 });
 
-module.exports = { getAllUsers, updateRole, getUserRoles, getUsersByRole, verifyEmailByAdmin };
+// GET /api/v1/users/:userId
+const getUserById = asyncHandler(async (req, res) => {
+  const user = await userManagementService.getUserByIdAsync(req.params.userId);
+  res.status(200).json(user);
+});
+
+// PUT /api/v1/users/:userId/profile (multipart/form-data)
+const updateProfile = asyncHandler(async (req, res) => {
+  const user = await userManagementService.updateProfileAsync(req.user, req.params.userId, req.body, req.file);
+  res.status(200).json(user);
+});
+
+module.exports = {
+  getAllUsers,
+  updateRole,
+  getUserRoles,
+  getUsersByRole,
+  verifyEmailByAdmin,
+  getUserById,
+  updateProfile,
+};

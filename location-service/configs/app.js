@@ -14,14 +14,10 @@ import { corsOptions } from './cors.configuration.js';
 import { helmetOptions } from './helmet.configuration.js';
 import { requestLimit } from './rateLimit.configuration.js';
 import { errorHandler } from '../middlewares/handle-errors.js';
+import { registerLocationSocket } from '../src/location/location.socket.js';
 
 const BASE_PATH = '/urbus/v1';
 const swaggerDoc = parse(readFileSync('./swagger.yaml', 'utf8'));
-
-// Coordenadas de Kinal y tolerancia
-const kinalCoords = { lat: 14.6258, lng: -90.5360 };
-const tolerance = 0.0002; // aprox 20 metros
-let busArrived = false;
 
 const middlewares = (app) => {
     app.use(express.urlencoded({ extended: false, limit: '10mb' }));
@@ -49,39 +45,28 @@ const routes = (app) => {
     });
 };
 
-export const initServer = async () => {
+// Separado de initServer para poder montar el servidor en las pruebas sin abrir el puerto real
+export const createServer = (socketOptions) => {
     const app = express();
-    const PORT = process.env.PORT;
     app.set('trust proxy', 1);
 
+    app.use(`${BASE_PATH}/swagger`, swaggerUi.serve, swaggerUi.setup(swaggerDoc));
+    middlewares(app);
+    routes(app);
+    app.use(errorHandler);
+
+    const server = http.createServer(app);
+    const io = new Server(server, { cors: { origin: "*" } });
+    registerLocationSocket(io, socketOptions);
+
+    return { app, server, io };
+};
+
+export const initServer = async () => {
+    const PORT = process.env.PORT;
+
     try {
-        app.use(`${BASE_PATH}/swagger`, swaggerUi.serve, swaggerUi.setup(swaggerDoc));
-        middlewares(app);
-        routes(app);
-        app.use(errorHandler);
-
-        const server = http.createServer(app);
-
-        const io = new Server(server, { cors: { origin: "*" } });
-
-        io.on("connection", (socket) => {
-            console.log("Usuario conectado");
-
-            socket.on("busLocation", (coords) => {
-                // Reenviar ubicación a todos
-                io.emit("updateBus", coords);
-
-                // Verificar llegada a Kinal
-                const distanceLat = Math.abs(coords.lat - kinalCoords.lat);
-                const distanceLng = Math.abs(coords.lng - kinalCoords.lng);
-
-                if (!busArrived && distanceLat <= tolerance && distanceLng <= tolerance) {
-                    busArrived = true;
-                    console.log("🚍 Bus llegó a Kinal");
-                    io.emit("busArrived");
-                }
-            });
-        });
+        const { server } = createServer();
 
         server.listen(PORT, () => {
             console.log(`UrBus Location Service running on port: ${PORT}`);

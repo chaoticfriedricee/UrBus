@@ -1,4 +1,5 @@
 import { useAuthStore } from '../../auth/store/authStore.js';
+import { useGroupStore } from '../../groups/store/groupStore.js';
 
 function IconBtn({ onClick, title, color, children }) {
     return (
@@ -37,7 +38,15 @@ export const PostCard = ({ post, onEdit, onDelete, onRestore }) => {
     const canEdit    = isAdmin || (isDriver && isOwner);
     const canRestore = isAdmin;
 
-    const { title, content, imageUrl, isDeleted, isUrgent, createdAt } = post;
+    const { title, content, imageUrl, isDeleted, isUrgent, createdAt, groupId } = post;
+
+    // post-service solo entrega avisos generales y los de los grupos del usuario
+    const groups = useGroupStore((s) => s.groups);
+    const audience = !groupId
+        ? 'General'
+        : (isAdmin || isDriver)
+            ? `Grupo: ${groups.find((g) => g._id === groupId)?.name ?? '—'}`
+            : 'Tu grupo';
 
     return (
         <div style={{
@@ -110,7 +119,7 @@ export const PostCard = ({ post, onEdit, onDelete, onRestore }) => {
                     {content}
                 </p>
                 <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#9ca3af' }}>
-                    {timeAgo(createdAt)}
+                    {timeAgo(createdAt)} · {audience}
                 </p>
             </div>
 

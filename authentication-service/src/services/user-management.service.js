@@ -1,8 +1,12 @@
 const userRepository = require('../repositories/user.repository');
 const roleRepository = require('../repositories/role.repository');
+const cloudinaryService = require('./cloudinary.service');
+const fileValidator = require('../utils/file-validator');
 const { toUserResponseDto } = require('../utils/user-mapper');
-const { ArgumentError, ConflictError, NotFoundError } = require('../utils/errors');
+const { ArgumentError, BusinessException, ConflictError, ForbiddenError, NotFoundError } = require('../utils/errors');
+const ErrorCodes = require('../utils/error-codes');
 const RoleConstants = require('../utils/role-constants');
+const logger = require('../../configs/logger.configuration');
 
 /**
  * Lista todos los usuarios registrados con su rol principal.
@@ -85,8 +89,68 @@ async function verifyUserEmailByAdminAsync(userId) {
   return toUserResponseDto(user);
 }
 
+/**
+ * Datos de contacto de una cuenta (lo usa el panel para ver la cuenta de un pasajero).
+ */
+async function getUserByIdAsync(userId) {
+  const user = await userRepository.getByIdAsync(userId);
+  return toUserResponseDto(user);
+}
+
+/**
+ * Actualiza nombre, apellido, teléfono y (opcionalmente) la foto de perfil.
+ * Solo el propio usuario o un administrador pueden hacerlo.
+ * El panel envía los campos en PascalCase (Name, Surname, Phone), igual que el
+ * DTO del proyecto .NET original; se aceptan también en camelCase.
+ */
+async function updateProfileAsync(requester, userId, dto, profilePictureFile) {
+  if (requester.id !== userId && requester.role !== RoleConstants.ADMIN_ROLE) {
+    throw new ForbiddenError('Solo puedes editar tu propio perfil');
+  }
+
+  const name = (dto.name ?? dto.Name ?? '').toString().trim();
+  const surname = (dto.surname ?? dto.Surname ?? '').toString().trim();
+  const phone = (dto.phone ?? dto.Phone ?? '').toString().trim();
+
+  if (!name || name.length > 25) {
+    throw new ArgumentError('El nombre es obligatorio y no debe tener más de 25 caracteres');
+  }
+  if (!surname || surname.length > 25) {
+    throw new ArgumentError('El apellido es obligatorio y no debe tener más de 25 caracteres');
+  }
+  if (!/^\d{8}$/.test(phone)) {
+    throw new ArgumentError('El número de teléfono debe tener exactamente 8 dígitos');
+  }
+
+  const user = await userRepository.getByIdAsync(userId);
+
+  if (profilePictureFile && profilePictureFile.size > 0) {
+    const { isValid, errorMessage } = fileValidator.validateImage(profilePictureFile);
+    if (!isValid) {
+      throw new BusinessException(ErrorCodes.INVALID_FILE_FORMAT, errorMessage);
+    }
+
+    try {
+      const fileName = fileValidator.generateSecureFileName(profilePictureFile.originalname);
+      user.userProfile.profilePicture = await cloudinaryService.uploadImageAsync(profilePictureFile, fileName);
+    } catch (err) {
+      logger.error(`Error uploading profile image: ${err.message}`);
+      throw new BusinessException(ErrorCodes.IMAGE_UPLOAD_FAILED, 'Failed to upload profile image');
+    }
+  }
+
+  user.name = name;
+  user.surname = surname;
+  user.userProfile.phone = phone;
+
+  const updatedUser = await userRepository.updateUserAsync(user);
+  return toUserResponseDto(updatedUser);
+}
+
 module.exports = {
   getAllUsersAsync,
+  getUserByIdAsync,
+  updateProfileAsync,
   updateUserRoleAsync,
   getUserRolesAsync,
   getUsersByRoleAsync,

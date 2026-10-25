@@ -20,9 +20,9 @@ info:
         │       └── socket.emit("busLocation", { lat, lng })
         │                           │
         │               Socket.IO Server
-        │                   io.emit("updateBus", coords)
+        │       io.to("driver:<id>").emit("updateBus", coords)
         │                           │
-        └── Pasajeros (navegadores) ← reciben coordenadas en tiempo real
+        └── Pasajeros de sus grupos ← reciben coordenadas en tiempo real
     ```
 
     ---
@@ -32,37 +32,68 @@ info:
     Conectarse al servidor Socket.IO en la raíz del servidor (sin path especial):
 
     ```javascript
-    const socket = io("http://localhost:PORT");
+    const socket = io("http://localhost:PORT", { auth: { token: accessToken } });
     ```
 
-    ### Evento emitido por el cliente (conductor)
+    La conexión exige el access token JWT. location-service consulta
+    `GET /groups/access` de passenger-service (variable `PASSENGER_SERVICE_URL`)
+    y rechaza la conexión con `UNAUTHORIZED` si el token no es válido.
+
+    - Cada conductor tiene una sala propia; entran él y los pasajeros de sus
+      grupos activos. Nadie más recibe su ubicación.
+    - Solo se guarda en memoria la última posición de quien comparte; no hay historial.
+
+    ### Eventos emitidos por el cliente (solo `DRIVER_ROLE`)
+
+    **`startSharing`** — el conductor empieza a compartir su ubicación.
+
+    **`stopSharing`** — deja de compartirla (de inmediato).
+
+    Si el conductor se desconecta sin `stopSharing` (app en segundo plano, pantalla
+    bloqueada, cambio de red), la ruta queda **en pausa** durante
+    `LOCATION_SHARING_GRACE_MS` (5 minutos por defecto): los pasajeros reciben
+    `locationStatus` con `paused: true` y la última posición conocida. Si el conductor
+    se reconecta y vuelve a emitir `startSharing`, la ruta continúa; si no, termina sola.
 
     **`busLocation`**
-    Envía la ubicación GPS actual del bus al servidor.
+    Envía la ubicación GPS actual del bus al servidor. Se ignora si el conductor
+    no emitió antes `startSharing`, o si la emite un pasajero.
 
     ```javascript
-    socket.emit("busLocation", {
+    socket.volatile.emit("busLocation", {
       lat: 14.6258,
-      lng: -90.5366
+      lng: -90.5366,
+      timestamp: position.timestamp
     });
     ```
 
-    | Campo | Tipo   | Descripción                |
-    |-------|--------|----------------------------|
-    | lat   | number | Latitud GPS del bus         |
-    | lng   | number | Longitud GPS del bus        |
+    | Campo     | Tipo   | Descripción |
+    |-----------|--------|-------------|
+    | lat       | number | Latitud GPS del bus |
+    | lng       | number | Longitud GPS del bus |
+    | timestamp | number | Opcional. Momento (ms, reloj del conductor) en que el GPS tomó la posición. Se descartan posiciones con un `timestamp` igual o anterior al último recibido en la ruta, para no mover el bus hacia atrás con posiciones repetidas o reenviadas. |
+
+    Se recomienda `volatile` para no acumular posiciones mientras no hay conexión.
 
     ---
 
-    ### Eventos emitidos por el servidor (broadcast a todos)
+    ### Eventos emitidos por el servidor (solo a la sala del conductor)
+
+    **`locationStatus`**
+    Se envía al conectar y cada vez que el conductor empieza, pausa o deja de compartir:
+    `{ sharing: boolean, paused?, lat?, lng?, updatedAt?, ageMs?, reason? }`.
+    - `reason: "NO_GROUP"`: el usuario no pertenece a ningún grupo activo (o es admin).
+    - `paused: true`: el conductor perdió la conexión; `lat`/`lng` son solo la última
+      posición conocida y no deben mostrarse como ubicación en vivo.
+    - `ageMs`: antigüedad de esa posición al enviarse el evento (no depende de que el
+      reloj del dispositivo coincida con el del servidor).
 
     **`updateBus`**
-    Se emite a todos los clientes conectados cada vez que el conductor envía
-    una nueva ubicación.
+    Se emite a la sala del conductor cada vez que envía una nueva ubicación.
 
     ```javascript
     socket.on("updateBus", (coords) => {
-      // coords = { lat: number, lng: number }
+      // coords = { lat: number, lng: number, updatedAt: string }
       busMarker.setLatLng([coords.lat, coords.lng]);
     });
     ```
@@ -81,8 +112,7 @@ info:
     });
     ```
 
-    Este evento solo se emite una vez por sesión de servidor (flag `busArrived`
-    se reinicia al reiniciar el servicio).
+    Se emite una vez por llegada y por conductor; se rearma cuando el bus sale de Kinal.
 
     ---
 
@@ -138,8 +168,8 @@ paths:
       operationId: getMapView
       description: |
         Renderiza la página HTML con el mapa Leaflet + OpenStreetMap.
-        La página se conecta automáticamente al servidor Socket.IO y empieza
-        a emitir la ubicación GPS del dispositivo (requiere permiso de geolocalización).
+        Es una vista pública sin sesión: ya no transmite el GPS del visitante y
+        la ubicación del bus solo está disponible en las apps de UrBus.
       responses:
         '200':
           description: HTML con el mapa Leaflet renderizado

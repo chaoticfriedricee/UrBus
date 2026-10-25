@@ -1,3 +1,4 @@
+const path = require('path');
 const { v2: cloudinary } = require('cloudinary');
 const env = require('../../configs/env.config');
 
@@ -17,13 +18,15 @@ cloudinary.config({
  */
 async function uploadImageAsync(file, fileName) {
   try {
-    const publicId = `${env.cloudinary.folder}/${fileName}`;
+    // El public_id ya incluye la carpeta (no se pasa `folder`, o Cloudinary la
+    // duplica) y va sin extensión (Cloudinary agrega el formato al servirla).
+    // Así la URL que arma getFullImageUrl(`<folder>/<fileName>`) coincide.
+    const publicId = `${env.cloudinary.folder}/${path.parse(fileName).name}`;
 
     await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           public_id: publicId,
-          folder: env.cloudinary.folder,
           transformation: [
             { width: 400, height: 400, crop: 'fill', gravity: 'face' },
             { quality: 'auto', fetch_format: 'auto' },
@@ -63,7 +66,14 @@ function getFullImageUrl(imagePath) {
   const folder = env.cloudinary.folder || 'auth_ks_in6av/profiles';
   const defaultPath = env.cloudinary.defaultAvatarPath || 'avatarDefault-1749508519496.png';
 
-  let pathToUse = imagePath || defaultPath;
+  // El avatar por defecto vive tal cual se configuró en CLOUDINARY_DEFAULT_AVATAR
+  // (en la raíz si no trae carpeta), no dentro de la carpeta de perfiles.
+  const defaultFileName = defaultPath.split('/').pop();
+  if (!imagePath || imagePath === defaultFileName || imagePath === defaultPath) {
+    return `${baseUrl}${defaultPath}`;
+  }
+
+  let pathToUse = imagePath;
   if (!pathToUse.includes('/')) pathToUse = `${folder}/${pathToUse}`;
 
   return `${baseUrl}${pathToUse}`;

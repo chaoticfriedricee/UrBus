@@ -1,4 +1,4 @@
-/*import { useState } from "react";
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { resetPassword } from "../../../shared/api/auth";
 import urbuLogo from "../../../assets/img/UrBus-logo.png";
@@ -102,6 +102,11 @@ export const ResetPasswordPage = () => {
             return;
         }
  
+        if (password.length < 8) {
+            alert("La contraseña debe tener al menos 8 caracteres");
+            return;
+        }
+ 
         if (password !== confirmar) {
             alert("Las contraseñas no coinciden");
             return;
@@ -115,7 +120,13 @@ export const ResetPasswordPage = () => {
         try {
             setLoading(true);
  
-            await resetPassword(token, password);
+            // El backend responde 200 con success:false si el token es inválido o expiró
+            const { data } = await resetPassword(token, password);
+ 
+            if (!data?.success) {
+                alert(data?.message || "Token inválido o expirado");
+                return;
+            }
  
             setDone(true);
  
@@ -123,6 +134,7 @@ export const ResetPasswordPage = () => {
             console.error(error);
  
             alert(
+                error.response?.data?.errors?.[0]?.message ||
                 error.response?.data?.message ||
                 "Error al restablecer contraseña"
             );
@@ -241,4 +253,3 @@ export const ResetPasswordPage = () => {
         </div>
     );
 };
-*/

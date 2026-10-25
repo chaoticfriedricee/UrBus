@@ -24,7 +24,8 @@ export const useVerifyEmail = (token, onFinish) => {
 
             try {
                 const response = await verifyEmailRequest(token);
-                if (response.status === 200) {
+                // El backend responde 200 con success:false si el token es inválido o expiró
+                if (response.status === 200 && response.data?.success) {
                     setStatus('success');
                     setMessage('Tu correo ha sido verificado correctamente.');
                     showSuccess('¡Correo verificado correctamente!');
@@ -33,7 +34,7 @@ export const useVerifyEmail = (token, onFinish) => {
                     setMessage('El enlace ha expirado o no es válido.');
                     showError('El enlace ha expirado o no es válido.');
                 }
-            } catch (error) {
+            } catch {
                 setStatus('error');
                 setMessage('El enlace ha expirado o no es válido.');
                 showError('El enlace ha expirado o no es válido.');

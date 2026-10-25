@@ -60,7 +60,14 @@ export function useAuth() {
       const { success, user, message, emailVerificationRequired } = response.data;
       return { success, user, message, emailVerificationRequired };
     } catch (err) {
-      const message = err.response?.data?.message ?? 'No se pudo completar el registro';
+      // Si falla la validación el backend responde { message: 'Invalid Arguments', errors: [{ field, message }] }
+      const fieldErrors = err.response?.data?.errors;
+      const message =
+        (Array.isArray(fieldErrors) && fieldErrors.length > 0
+          ? fieldErrors.map((e) => e.message).join('\n')
+          : null) ??
+        err.response?.data?.message ??
+        'No se pudo completar el registro';
       setError(message);
       return { success: false, message };
     } finally {

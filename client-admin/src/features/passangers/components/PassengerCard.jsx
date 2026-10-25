@@ -205,12 +205,14 @@ export const PassengerCard = ({ passenger, onEdit, onDelete }) => {
                     </button>
                 )}
 
-                <Checkbox
-                    checked={isPresent}
-                    onChange={canToggleStatus ? () => toggleStatus(_id) : undefined}
-                    title={canToggleStatus ? (isPresent ? 'Marcar como ausente' : 'Marcar como presente') : 'Solo el conductor o un administrador pueden marcar asistencia'}
-                    disabled={!canToggleStatus}
-                />
+                {/* Un pasajero solo recibe el nombre de sus compañeros de grupo, no su asistencia */}
+                {canToggleStatus && (
+                    <Checkbox
+                        checked={isPresent}
+                        onChange={() => toggleStatus(_id)}
+                        title={isPresent ? 'Marcar como ausente' : 'Marcar como presente'}
+                    />
+                )}
 
                 {canViewInfo && (
                     <IconBtn onClick={handleViewInfo} title="Ver información de contacto" color="#005691">

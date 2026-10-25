@@ -4,6 +4,7 @@ const createApp = require('./configs/app');
 const sequelize = require('./src/models/sequelize');
 require('./src/models'); // Registra las asociaciones antes de sincronizar
 const { seedAsync } = require('./src/database/seed');
+const { migrateAsync } = require('./src/database/migrations');
 
 async function bootstrap() {
   try {
@@ -12,6 +13,7 @@ async function bootstrap() {
 
     // Garantiza que las tablas existan (equivalente a context.Database.EnsureCreatedAsync())
     await sequelize.sync();
+    await migrateAsync();
 
     logger.info('Base de datos lista. Ejecutando datos semilla...');
     await seedAsync();

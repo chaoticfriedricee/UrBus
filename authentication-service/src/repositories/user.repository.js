@@ -4,6 +4,10 @@ const { User, UserProfile, UserEmail, UserPasswordReset, UserRole, Role } = requ
 const { generateUserId } = require('../utils/uuid-generator');
 const { NotFoundError } = require('../utils/errors');
 
+// iLike interpreta % y _ como comodines; se escapan para que la comparación sea
+// exacta (solo sin distinguir mayúsculas). Sin esto "cond%" encontraba a "conductor".
+const escapeLike = (value) => String(value).replace(/[\\%_]/g, '\\$&');
+
 const FULL_INCLUDE = [
   { model: UserProfile, as: 'userProfile' },
   { model: UserEmail, as: 'userEmail' },
@@ -32,14 +36,14 @@ async function getByIdAsync(id) {
 
 async function getByEmailAsync(email) {
   return User.findOne({
-    where: { email: { [Op.iLike]: email } },
+    where: { email: { [Op.iLike]: escapeLike(email) } },
     include: FULL_INCLUDE,
   });
 }
 
 async function getByUserAsync(username) {
   return User.findOne({
-    where: { username: { [Op.iLike]: username } },
+    where: { username: { [Op.iLike]: escapeLike(username) } },
     include: FULL_INCLUDE,
   });
 }
@@ -147,12 +151,12 @@ async function deleteUserAsync(id) {
 }
 
 async function existsByEmailAsync(email) {
-  const count = await User.count({ where: { email: { [Op.iLike]: email } } });
+  const count = await User.count({ where: { email: { [Op.iLike]: escapeLike(email) } } });
   return count > 0;
 }
 
 async function existsByUsernameAsync(username) {
-  const count = await User.count({ where: { username: { [Op.iLike]: username } } });
+  const count = await User.count({ where: { username: { [Op.iLike]: escapeLike(username) } } });
   return count > 0;
 }
 

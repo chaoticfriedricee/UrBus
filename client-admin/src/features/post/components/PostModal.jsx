@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePostStore } from '../store/postStore.js';
+import { useGroupStore } from '../../groups/store/groupStore.js';
 
 export const PostModal = ({ post, onClose }) => {
     const isEdit = Boolean(post);
@@ -12,7 +13,18 @@ export const PostModal = ({ post, onClose }) => {
     const [isUrgent, setIsUrgent] = useState(post?.isUrgent ?? false);
     const [imageFile, setImageFile] = useState(null);
     const [preview, setPreview] = useState(post?.imageUrl ?? null);
+    // '' = aviso general; si no, id del grupo destinatario (post-service valida que sea tuyo)
+    const [groupId, setGroupId] = useState(post?.groupId ?? '');
     const fileRef = useRef(null);
+
+    // El conductor ve sus grupos; el admin, todos
+    const groups = useGroupStore((s) => s.groups);
+    const fetchGroups = useGroupStore((s) => s.fetchGroups);
+    const activeGroups = groups.filter((g) => g.isActive || g._id === groupId);
+
+    useEffect(() => {
+        if (groups.length === 0) fetchGroups();
+    }, [groups.length, fetchGroups]);
 
     useEffect(() => {
         if (imageFile) {
@@ -28,6 +40,7 @@ export const PostModal = ({ post, onClose }) => {
         fd.append('title', title.trim());
         fd.append('content', content.trim());
         fd.append('isUrgent', String(isUrgent));
+        if (groupId !== (post?.groupId ?? '')) fd.append('groupId', groupId);
         if (imageFile) fd.append('image', imageFile);
 
         const result = isEdit
@@ -110,6 +123,30 @@ export const PostModal = ({ post, onClose }) => {
                                 fontFamily: 'inherit', lineHeight: 1.5,
                             }}
                         />
+                    </div>
+
+                    <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
+                            Dirigido a
+                        </label>
+                        <select
+                            value={groupId}
+                            onChange={(e) => setGroupId(e.target.value)}
+                            style={{
+                                width: '100%', boxSizing: 'border-box',
+                                padding: '10px 14px', borderRadius: 10,
+                                border: '1.5px solid #e5e7eb', background: '#fff',
+                                fontSize: 14, color: '#111827', fontFamily: 'inherit',
+                            }}
+                        >
+                            <option value="">Todos (aviso general)</option>
+                            {activeGroups.map((g) => (
+                                <option key={g._id} value={g._id}>Grupo: {g.name}</option>
+                            ))}
+                        </select>
+                        <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#9ca3af' }}>
+                            Un aviso de grupo solo lo ven los pasajeros de ese grupo.
+                        </p>
                     </div>
 
                     <div>

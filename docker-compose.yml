@@ -27,32 +27,51 @@ services:
 
   authentication-service:
     build:
-      context: ./authentication-service
-      dockerfile: ../dockerfiles/Dockerfile.auth-service
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.auth-service
     container_name: urbus_authentication_service
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:5166
-      ConnectionStrings__DefaultConnection: "Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Port=5432"
-      CloudinarySettings__CloudName: ${CLOUDINARY_CLOUD_NAME}
-      CloudinarySettings__ApiKey: ${CLOUDINARY_API_KEY}
-      CloudinarySettings__ApiSecret: ${CLOUDINARY_API_SECRET}
-      CloudinarySettings__BaseUrl: ${CLOUDINARY_BASE_URL}
-      CloudinarySettings__Folder: ${CLOUDINARY_FOLDER}
-      CloudinarySettings__DefaultAvatarPath: ${CLOUDINARY_DEFAULT_AVATAR}
-      SmtpSettings__Host: ${SMTP_HOST}
-      SmtpSettings__Port: ${SMTP_PORT}
-      SmtpSettings__Username: ${SMTP_USERNAME}
-      SmtpSettings__Password: ${SMTP_PASSWORD}
-      SmtpSettings__FromEmail: ${SMTP_FROM_EMAIL}
-      SmtpSettings__FromName: ${SMTP_FROM_NAME}
-      AppSettings__FrontendUrl: ${AUTH_FRONTEND_URL}
-      JwtSettings__SecretKey: ${JWT_SECRET}
-      JwtSettings__Issuer: ${JWT_ISSUER}
-      JwtSettings__Audience: ${JWT_AUDIENCE}
-      JwtSettings__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES}
-    volumes:
-      - ./authentication-service:/src
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${AUTH_PORT}
+      FRONTEND_URL: ${FRONTEND_URL}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_LOGGING: ${DB_LOGGING}
+      DB_SSL: ${DB_SSL:-false}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_AUDIENCE: ${JWT_AUDIENCE}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES}
+      BREVO_ENABLED: ${BREVO_ENABLED:-false}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      BREVO_FROM_EMAIL: ${BREVO_FROM_EMAIL:-}
+      BREVO_FROM_NAME: ${BREVO_FROM_NAME:-UrBus Support}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      CLOUDINARY_BASE_URL: ${CLOUDINARY_BASE_URL}
+      CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER}
+      CLOUDINARY_DEFAULT_AVATAR: ${CLOUDINARY_DEFAULT_AVATAR}
+      SMTP_ENABLED: ${SMTP_ENABLED}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USE_IMPLICIT_SSL: ${SMTP_USE_IMPLICIT_SSL}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME}
+      SMTP_TIMEOUT_MS: ${SMTP_TIMEOUT_MS}
+      SMTP_USE_FALLBACK: ${SMTP_USE_FALLBACK}
+      SMTP_IGNORE_CERTIFICATE_ERRORS: ${SMTP_IGNORE_CERTIFICATE_ERRORS}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      ADMIN_ALLOWED_ORIGINS: ${ADMIN_ALLOWED_ORIGINS}
+      AUTH_RATE_LIMIT_WINDOW_MINUTES: ${AUTH_RATE_LIMIT_WINDOW_MINUTES}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX}
+      API_RATE_LIMIT_WINDOW_MINUTES: ${API_RATE_LIMIT_WINDOW_MINUTES}
+      API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX}
     ports:
       - "${AUTH_PORT}:5166"
     depends_on:
@@ -63,12 +82,14 @@ services:
 
   location-service:
     build:
-      context: ./location-service
-      dockerfile: ../dockerfiles/Dockerfile.location-service
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.location-service
     container_name: urbus_location_service
     environment:
       PORT: ${LOCATION_PORT}
       URI_MONGODB: mongodb://mongo:27017/UrBus
+      # Autoriza quién puede ver la ubicación de cada conductor
+      PASSENGER_SERVICE_URL: http://passenger-service:${PASSENGER_PORT}/urbus/v1
     volumes:
       - ./location-service:/app
       - /app/node_modules
@@ -76,37 +97,15 @@ services:
       - "${LOCATION_PORT}:${LOCATION_PORT}"
     depends_on:
       - mongo
-    networks:
-      - urbus_network
-    restart: unless-stopped
-
-  notification-service:
-    build:
-      context: ./notification-service
-      dockerfile: ../dockerfiles/Dockerfile.notification-service
-    container_name: urbus_notification_service
-    environment:
-      PORT: ${NOTIFICATION_PORT}
-      URI_MONGODB: mongodb://mongo:27017/notifications
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
-      JWT_ISSUER: ${JWT_ISSUER}
-      JWT_AUDIENCE: ${JWT_AUDIENCE}
-    volumes:
-      - ./notification-service:/app
-      - /app/node_modules
-    ports:
-      - "${NOTIFICATION_HOST_PORT}:${NOTIFICATION_PORT}"
-    depends_on:
-      - mongo
+      - passenger-service
     networks:
       - urbus_network
     restart: unless-stopped
 
   passenger-service:
     build:
-      context: ./passenger-service
-      dockerfile: ../dockerfiles/Dockerfile.passenger-service
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.passenger-service
     container_name: urbus_passenger_service
     environment:
       PORT: ${PASSENGER_PORT}
@@ -128,8 +127,8 @@ services:
 
   post-service:
     build:
-      context: ./post-service
-      dockerfile: ../dockerfiles/Dockerfile.post-service
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.post-service
     container_name: urbus_post_service
     environment:
       PORT: ${POST_PORT}
@@ -141,6 +140,8 @@ services:
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      # Autoriza qué avisos de grupo puede ver o publicar cada usuario
+      PASSENGER_SERVICE_URL: http://passenger-service:${PASSENGER_PORT}/urbus/v1
     volumes:
       - ./post-service:/app
       - /app/node_modules
@@ -148,6 +149,7 @@ services:
       - "${POST_PORT}:${POST_PORT}"
     depends_on:
       - mongo
+      - passenger-service
     networks:
       - urbus_network
     restart: unless-stopped
@@ -156,22 +158,26 @@ services:
     build:
       context: .
       dockerfile: ./dockerfiles/Dockerfile.client-admin
+      args:
+        VITE_LOCATION_SERVICE_URL: ${VITE_LOCATION_SERVICE_URL}
+        VITE_AUTH_URL: ${VITE_AUTH_URL}
+        VITE_POST_URL: ${VITE_POST_URL}
+        VITE_PASSENGER_URL: ${VITE_PASSENGER_URL}
     container_name: urbus_client_admin
     environment:
+      PORT: ${CLIENT_ADMIN_PORT}
       VITE_LOCATION_SERVICE_URL: ${VITE_LOCATION_SERVICE_URL}
       VITE_AUTH_URL: ${VITE_AUTH_URL}
       VITE_POST_URL: ${VITE_POST_URL}
       VITE_PASSENGER_URL: ${VITE_PASSENGER_URL}
-      VITE_NOTIFICATION_URL: ${VITE_NOTIFICATION_URL}
     volumes:
       - ./client-admin:/app
       - /app/node_modules
     ports:
-      - "${CLIENT_ADMIN_PORT}:5173"
+      - "${CLIENT_ADMIN_PORT}:${CLIENT_ADMIN_PORT}"
     depends_on:
       - authentication-service
       - location-service
-      - notification-service
       - passenger-service
       - post-service
     networks:

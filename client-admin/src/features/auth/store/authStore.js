@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { login as loginRequest, register as registerRequest } from '../../../shared/api/auth.js';
+import { login as loginRequest, register as registerRequest, getMe } from '../../../shared/api/auth.js';
 import { updateProfile as updateProfileRequest } from '../../../shared/api/profile.js';
 import { showError } from '../../../shared/utils/toast.js';
 
@@ -19,6 +19,17 @@ export const useAuthStore = create(
         isAuthenticated: false,
 
         setUser: (updatedUser) => set({ user: updatedUser }),
+
+        // El login solo devuelve id/username/foto/rol; nombre, apellido, teléfono
+        // y email (que muestran el sidebar y el modal de perfil) vienen de /auth/me.
+        loadProfile: async () => {
+            try {
+                const { data } = await getMe();
+                set({ user: { ...get().user, ...data } });
+            } catch {
+                // Si falla se conservan los datos básicos del login
+            }
+        },
 
         checkAuth: () => {
             const token = get().token;
@@ -39,11 +50,13 @@ export const useAuthStore = create(
                 return;
             }
 
+            const isAuthenticated = Boolean(token) && hasValidRole;
             set({
                 isLoadingAuth: false,
                 loading: false,
-                isAuthenticated: Boolean(token) && hasValidRole,
+                isAuthenticated,
             });
+            if (isAuthenticated) get().loadProfile();
         },
 
         logout: () => {
@@ -75,6 +88,7 @@ export const useAuthStore = create(
                 set({ user: data.userDetails, token: data.token, refreshToken: data.refreshToken,
                     expiresAt: data.expiresAt, isAuthenticated: true, isLoadingAuth: false,
                     loading: false, error: null });
+                get().loadProfile();
                 return { success: true, role };
             } catch (err) {
                 const status = err.response?.status;

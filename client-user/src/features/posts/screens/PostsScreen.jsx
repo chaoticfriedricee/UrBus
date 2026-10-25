@@ -2,11 +2,16 @@
 // Pantalla "Anuncios del Bus" — replica el mockup: tarjetas con icono cuadrado,
 // título en negrita y "Hace X min". Para DRIVER_ROLE/ADMIN_ROLE agrega un botón
 // flotante para publicar y acciones de editar/eliminar (funciones portadas de
-// client-admin, features/post/pages/PostListPage.jsx).
+// client-admin, features/post/pages/PostListPage.jsx). Los urgentes se destacan en rojo y
+// el ADMIN puede ver los eliminados y restaurarlos. post-service solo devuelve los avisos
+// generales y los del grupo (o grupos) del usuario (al admin, todos).
 import React, { useEffect, useCallback, useState } from 'react';
-import { FlatList, RefreshControl, TouchableOpacity, View, Text, Image, StyleSheet } from 'react-native';
+import { FlatList, RefreshControl, TouchableOpacity, View, Text, Image, Alert, StyleSheet } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { usePosts } from '../hooks/usePosts';
+import useUrgentPostsStore from '../store/urgentPostsStore';
+import { getGroups } from '../../../shared/api/groupApi';
 import PostFormModal from '../components/PostFormModal';
 import ConfirmModal from '../../../shared/components/common/ConfirmModal';
 import { EmptyState, LoadingSpinner } from '../../../shared/components/common/Common';
@@ -25,13 +30,39 @@ function timeAgo(dateStr) {
 export default function PostsScreen({ navigation }) {
   const user = useAuthStore((state) => state.user);
   const canManage = MANAGER_ROLES.includes(user?.role);
+  const isAdmin = user?.role === 'ADMIN_ROLE';
 
-  const { posts, loading, error, fetchPosts, addPost, editPost, removePost } = usePosts();
+  const { posts, loading, error, fetchPosts, addPost, editPost, removePost, restorePost } = usePosts();
+  const setUrgentPosts = useUrgentPostsStore((state) => state.setPosts);
+  const markUrgentSeen = useUrgentPostsStore((state) => state.markSeen);
+  const [showDeleted, setShowDeleted] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [formModal, setFormModal] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [groups, setGroups] = useState([]);
 
   useEffect(() => { fetchPosts(false); }, [fetchPosts]);
+
+  // Abrir "Anuncios" cuenta como revisar los urgentes (quita el punto rojo de la pestaña)
+  useFocusEffect(useCallback(() => { markUrgentSeen(); }, [markUrgentSeen]));
+  useEffect(() => {
+    setUrgentPosts(posts);
+    if (navigation.isFocused()) markUrgentSeen();
+  }, [posts, setUrgentPosts, markUrgentSeen, navigation]);
+
+  // Grupos a los que el conductor (o admin) puede dirigir un aviso
+  useEffect(() => {
+    if (!canManage) return;
+    getGroups()
+      .then(({ data }) => setGroups((data.data ?? []).filter((g) => g.isActive)))
+      .catch(() => setGroups([]));
+  }, [canManage]);
+
+  const audienceLabel = (post) => {
+    if (!post.groupId) return 'General';
+    if (!canManage) return 'Tu grupo';
+    return groups.find((g) => g._id === post.groupId)?.name ?? 'Grupo';
+  };
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -49,7 +80,13 @@ export default function PostsScreen({ navigation }) {
     setDeleteTarget(null);
   };
 
-  const visiblePosts = posts.filter((p) => !p.isDeleted);
+  const handleRestore = async (post) => {
+    const result = await restorePost(post.id);
+    if (!result.success) Alert.alert('No se pudo restaurar', result.message);
+  };
+
+  const visiblePosts = isAdmin && showDeleted ? posts : posts.filter((p) => !p.isDeleted);
+  const deletedCount = posts.filter((p) => p.isDeleted).length;
 
   return (
     <View style={styles.container}>
@@ -60,15 +97,32 @@ export default function PostsScreen({ navigation }) {
         keyExtractor={(item) => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={!loading ? <EmptyState message={error ?? 'No hay anuncios por el momento'} icon="campaign" /> : null}
-        ListHeaderComponent={loading && visiblePosts.length === 0 ? <LoadingSpinner /> : null}
+        ListHeaderComponent={
+          <>
+            {isAdmin && (deletedCount > 0 || showDeleted) ? (
+              <TouchableOpacity
+                style={[styles.deletedToggle, showDeleted && styles.deletedToggleOn]}
+                onPress={() => setShowDeleted((v) => !v)}
+              >
+                <MaterialIcons name={showDeleted ? 'visibility-off' : 'restore-from-trash'} size={16} color={COLORS.primary} />
+                <Text style={styles.deletedToggleText}>
+                  {showDeleted ? 'Ocultar eliminados' : `Ver eliminados (${deletedCount})`}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            {loading && visiblePosts.length === 0 ? <LoadingSpinner /> : null}
+          </>
+        }
         renderItem={({ item }) => {
           const isOwner = user?.id === item.createdBy || user?.uid === item.createdBy;
-          const canEdit = canManage && (user?.role === 'ADMIN_ROLE' || isOwner);
+          const canEdit = canManage && !item.isDeleted && (isAdmin || isOwner);
+          const urgent = item.isUrgent && !item.isDeleted;
           return (
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => navigation.navigate('PostDetail', { id: item.id })}
-              style={styles.card}
+              // Un eliminado solo lo puede abrir el admin para restaurarlo desde la lista
+              onPress={() => (item.isDeleted ? null : navigation.navigate('PostDetail', { id: item.id }))}
+              style={[styles.card, urgent && styles.cardUrgent, item.isDeleted && styles.cardDeleted]}
             >
               {item.image ? (
                 <Image source={{ uri: item.image }} style={styles.icon} />
@@ -78,9 +132,19 @@ export default function PostsScreen({ navigation }) {
                 </View>
               )}
               <View style={styles.cardBody}>
+                {urgent ? <Text style={styles.urgentLabel}>URGENTE</Text> : null}
+                {item.isDeleted ? <Text style={styles.deletedLabel}>ELIMINADO</Text> : null}
                 <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-                <Text style={styles.cardTime}>{timeAgo(item.createdAt)}</Text>
+                <Text style={styles.cardTime}>
+                  {timeAgo(item.createdAt)} · {audienceLabel(item)}
+                </Text>
               </View>
+              {isAdmin && item.isDeleted ? (
+                <TouchableOpacity style={styles.restoreBtn} onPress={() => handleRestore(item)}>
+                  <MaterialIcons name="restore" size={15} color={COLORS.success} />
+                  <Text style={styles.restoreText}>Restaurar</Text>
+                </TouchableOpacity>
+              ) : null}
               {canEdit ? (
                 <View style={styles.cardActions}>
                   <TouchableOpacity style={styles.iconBtn} onPress={() => setFormModal({ post: item })}>
@@ -105,6 +169,7 @@ export default function PostsScreen({ navigation }) {
       <PostFormModal
         visible={Boolean(formModal)}
         post={formModal?.post}
+        groups={groups}
         loading={loading}
         onClose={() => setFormModal(null)}
         onSubmit={handleFormSubmit}
@@ -135,5 +200,21 @@ const styles = StyleSheet.create({
   cardActions: { flexDirection: 'row', gap: 6, marginLeft: SPACING.sm },
   iconBtn: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e8f0fe' },
   iconBtnDanger: { backgroundColor: '#fee2e2' },
+  cardUrgent: { backgroundColor: '#fef2f2', borderLeftWidth: 4, borderLeftColor: COLORS.error },
+  cardDeleted: { opacity: 0.6 },
+  urgentLabel: { fontSize: 10.5, fontWeight: '800', color: COLORS.error, letterSpacing: 0.5, marginBottom: 2 },
+  deletedLabel: { fontSize: 10.5, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 0.5, marginBottom: 2 },
+  restoreBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: SPACING.sm,
+    paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8, backgroundColor: '#dcfce7',
+  },
+  restoreText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.success },
+  deletedToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginBottom: SPACING.md,
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: RADIUS.pill, borderWidth: 1.5, borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  deletedToggleOn: { borderColor: COLORS.primary, backgroundColor: '#e8f1f9' },
+  deletedToggleText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.primary },
   fab: { position: 'absolute', right: SPACING.lg, bottom: SPACING.lg, width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', ...SHADOWS.card },
 });

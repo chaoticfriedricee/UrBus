@@ -1,26 +1,60 @@
 // src/features/bus/screens/BusTrackingScreen.jsx
 // Pantalla "Mapa a Tiempo Real" — replica el mockup: encabezado azul con título
-// e iconos, mapa de fondo claro y marcador del bus. Para DRIVER_ROLE/ADMIN_ROLE
-// agrega los controles "Iniciar Ruta" / "Finalizar Ruta" (portados de
-// client-admin, features/location/pages/LocationPage.jsx).
-import React from 'react';
+// e iconos, mapa de fondo claro y marcador del bus. Para DRIVER_ROLE agrega los
+// controles "Iniciar Ruta" / "Finalizar Ruta", que comparten su ubicación con los
+// pasajeros de sus grupos (también en segundo plano con el permiso «Todo el tiempo»).
+// Los pasajeros solo ven la ubicación de su conductor y
+// únicamente mientras él la comparte. Una posición vieja se muestra con su antigüedad,
+// nunca como ubicación en vivo.
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import OSMMapView from '../components/OSMMapView';
 import { useBusTracking } from '../hooks/useBusTracking';
+import { describeFreshness } from '../utils/locationFreshness';
 import { EmptyState } from '../../../shared/components/common/Common';
 import useAuthStore from '../../../shared/store/authStore';
-import { COLORS, SPACING, FONT_SIZE, RADIUS, MANAGER_ROLES } from '../../../shared/constants/theme';
+import { COLORS, SPACING, FONT_SIZE, RADIUS, ROLES } from '../../../shared/constants/theme';
 
 // Coordenadas de Kinal (destino de referencia usado por location-service)
 const DEFAULT_REGION = { latitude: 14.6258, longitude: -90.536, latitudeDelta: 0.03, longitudeDelta: 0.03 };
 
 export default function BusTrackingScreen() {
   const user = useAuthStore((state) => state.user);
-  const isManager = MANAGER_ROLES.includes(user?.role);
+  const isDriver = user?.role === ROLES.DRIVER;
 
-  const { coords, arrived, connected, error, routeActive, startRoute, endRoute } = useBusTracking();
+  const {
+    coords, arrived, connected, sharing, noGroup, error, gpsError, routeActive, pausedRoute, backgroundMode,
+    startRoute, endRoute, openLocationSettings,
+  } = useBusTracking();
+
+  // Refresca el "hace X" mientras hay una posición en pantalla (solo re-renderiza)
+  const [now, setNow] = useState(() => Date.now());
+  const hasCoords = Boolean(coords);
+  useEffect(() => {
+    if (!hasCoords) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, [hasCoords]);
+
+  const freshness = coords?.seenAt ? describeFreshness(coords, now) : null;
+  const isLive = freshness?.state === 'live';
+  const canEndRoute = routeActive || pausedRoute;
+  const bannerError = error || gpsError;
+
+  // Para quien no es conductor: nunca se insinúa una ubicación en vivo si no se está compartiendo
+  let emptyMessage = 'Esperando ubicación del bus';
+  let emptyIcon = 'directions-bus';
+  if (noGroup) {
+    emptyMessage = user?.role === ROLES.ADMIN
+      ? 'La ubicación solo la ven el conductor y los pasajeros de su grupo'
+      : 'Únete a un grupo con el código de tu conductor para ver la ubicación del bus';
+    emptyIcon = 'group-add';
+  } else if (sharing === false) {
+    emptyMessage = 'Tu conductor no está compartiendo su ubicación en este momento';
+    emptyIcon = 'location-off';
+  }
 
   const region = coords
     ? { latitude: coords.lat, longitude: coords.lng, latitudeDelta: 0.01, longitudeDelta: 0.01 }
@@ -52,15 +86,57 @@ export default function BusTrackingScreen() {
         </View>
       ) : null}
 
-      {error ? (
+      {bannerError ? (
         <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{error}</Text>
+          <Text style={styles.errorText}>{bannerError}</Text>
         </View>
       ) : null}
 
-      {!coords && !isManager ? (
+      {isDriver ? (
+        <View style={styles.sharingBadge}>
+          <MaterialIcons
+            name={routeActive ? 'location-on' : pausedRoute ? 'pause-circle-outline' : 'location-off'}
+            size={14}
+            color={routeActive ? COLORS.success : pausedRoute ? COLORS.warning : COLORS.textMuted}
+          />
+          <Text style={styles.sharingText}>
+            {routeActive
+              ? 'Compartiendo tu ubicación con tus grupos'
+              : pausedRoute
+                ? 'Tu ruta quedó en pausa: inicia la ruta para reanudarla o finalízala'
+                : 'No estás compartiendo tu ubicación'}
+          </Text>
+        </View>
+      ) : null}
+
+      {isDriver && routeActive && backgroundMode === 'background' ? (
+        <Text style={styles.hintText}>
+          Puedes cambiar de app o bloquear la pantalla: la ubicación se sigue enviando mientras veas la notificación «UrBus · Ruta activa».
+        </Text>
+      ) : null}
+
+      {isDriver && routeActive && backgroundMode === 'foreground' ? (
+        <View style={styles.foregroundNotice}>
+          <Text style={styles.foregroundNoticeText}>
+            Solo se envía con UrBus abierta. Para que siga al cambiar de app o bloquear la pantalla, permite la ubicación «Todo el tiempo».
+          </Text>
+          <TouchableOpacity style={styles.settingsBtn} onPress={openLocationSettings}>
+            <MaterialIcons name="settings" size={14} color={COLORS.primary} />
+            <Text style={styles.settingsBtnText}>Abrir ajustes</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {freshness ? (
+        <View style={[styles.freshnessBadge, !isLive && styles.freshnessStale]}>
+          <MaterialIcons name={isLive ? 'gps-fixed' : 'history'} size={14} color={isLive ? COLORS.success : COLORS.warning} />
+          <Text style={[styles.freshnessText, !isLive && styles.freshnessTextStale]}>{freshness.label}</Text>
+        </View>
+      ) : null}
+
+      {!coords && !isDriver ? (
         <View style={styles.emptyWrap}>
-          <EmptyState message="Esperando ubicación del bus" icon="directions-bus" />
+          <EmptyState message={emptyMessage} icon={emptyIcon} />
         </View>
       ) : (
         <OSMMapView
@@ -82,14 +158,15 @@ export default function BusTrackingScreen() {
                   latitude: coords.lat,
                   longitude: coords.lng,
                   title: 'Bus UrBus',
-                  description: 'Ubicación en tiempo real',
+                  description: isLive ? 'Ubicación en tiempo real' : 'Última ubicación conocida',
+                  opacity: isLive ? 1 : 0.45,
                 }
               : null
           }
         />
       )}
 
-      {isManager ? (
+      {isDriver ? (
         <View style={styles.driverControls}>
           <TouchableOpacity
             style={[styles.routeBtn, styles.startBtn, routeActive && styles.btnDisabled]}
@@ -100,9 +177,9 @@ export default function BusTrackingScreen() {
             <Text style={styles.routeBtnText}>Iniciar Ruta</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.routeBtn, styles.endBtn, !routeActive && styles.btnDisabled]}
+            style={[styles.routeBtn, styles.endBtn, !canEndRoute && styles.btnDisabled]}
             onPress={endRoute}
-            disabled={!routeActive}
+            disabled={!canEndRoute}
           >
             <MaterialIcons name="stop" size={18} color="#fff" />
             <Text style={styles.routeBtnText}>Finalizar Ruta</Text>
@@ -127,6 +204,35 @@ const styles = StyleSheet.create({
   statusDot: { width: 9, height: 9, borderRadius: 5 },
   map: { flex: 1 },
   emptyWrap: { flex: 1 },
+  sharingBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center',
+    marginVertical: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: 6,
+    borderRadius: RADIUS.pill, backgroundColor: COLORS.surface,
+  },
+  sharingText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.textLight },
+  hintText: {
+    fontSize: FONT_SIZE.xs, color: COLORS.textLight, textAlign: 'center',
+    paddingHorizontal: SPACING.lg, marginBottom: SPACING.sm,
+  },
+  foregroundNotice: {
+    marginHorizontal: SPACING.md, marginBottom: SPACING.sm, padding: SPACING.sm,
+    borderRadius: RADIUS.md, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a',
+  },
+  foregroundNoticeText: { fontSize: FONT_SIZE.xs, color: '#92400e', textAlign: 'center' },
+  settingsBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    alignSelf: 'center', marginTop: 6, paddingHorizontal: SPACING.md, paddingVertical: 6,
+    borderRadius: RADIUS.pill, backgroundColor: COLORS.surface,
+  },
+  settingsBtnText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.primary },
+  freshnessBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center',
+    marginBottom: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: 6,
+    borderRadius: RADIUS.pill, backgroundColor: '#f0fdf4',
+  },
+  freshnessStale: { backgroundColor: '#fffbeb' },
+  freshnessText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.success },
+  freshnessTextStale: { color: COLORS.warning },
   banner: {
     position: 'absolute', top: 110, left: SPACING.md, right: SPACING.md, zIndex: 10,
     backgroundColor: COLORS.success, borderRadius: RADIUS.md, paddingVertical: SPACING.sm, alignItems: 'center',

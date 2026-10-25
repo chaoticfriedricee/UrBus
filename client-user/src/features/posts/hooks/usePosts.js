@@ -12,7 +12,10 @@ function mapPost(raw) {
     image: raw.imageUrl ?? null,
     createdAt: raw.createdAt,
     createdBy: raw.createdBy,
+    // null = aviso general; si no, el grupo al que va dirigido
+    groupId: raw.groupId ?? null,
     isDeleted: raw.isDeleted ?? false,
+    isUrgent: raw.isUrgent ?? false,
   };
 }
 
@@ -92,8 +95,9 @@ export function usePosts() {
       const response = await reactivatePost(id);
       const raw = response.data.post ?? response.data.data ?? response.data;
       setPosts((prev) => prev.map((p) => (p.id === id ? mapPost(raw) : p)));
+      return { success: true };
     } catch (err) {
-      setError(err.response?.data?.message ?? 'No se pudo reactivar el anuncio');
+      return { success: false, message: err.response?.data?.message ?? 'No se pudo restaurar el anuncio' };
     }
   }, []);
 
