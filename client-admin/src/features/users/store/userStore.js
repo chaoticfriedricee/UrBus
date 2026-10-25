@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getAllUsers, updateUserRole, updatePassengerType, verifyUserEmail } from '../../../shared/api/users.js';
+import { getAllUsers, updateUserRole, verifyUserEmail } from '../../../shared/api/users.js';
 import { showSuccess, showError } from '../../../shared/utils/toast.js';
 
 export const useUserStore = create((set, get) => ({
@@ -38,28 +38,6 @@ export const useUserStore = create((set, get) => ({
         } catch (err) {
             set({ users: snapshot });
             const msg = err.response?.data?.message || 'Error al actualizar el rol';
-            showError(msg);
-            return { success: false, error: msg };
-        }
-    },
-
-    changePassengerType: async (userId, passengerType) => {
-        const snapshot = get().users;
-        set((state) => ({
-            users: state.users.map((u) =>
-                u.id === userId ? { ...u, passengerType } : u
-            ),
-        }));
-        try {
-            const { data: updated } = await updatePassengerType(userId, passengerType);
-            set((state) => ({
-                users: state.users.map((u) => (u.id === userId ? { ...u, ...updated } : u)),
-            }));
-            showSuccess('Tipo de pasajero actualizado');
-            return { success: true };
-        } catch (err) {
-            set({ users: snapshot });
-            const msg = err.response?.data?.message || 'Error al actualizar el tipo de pasajero';
             showError(msg);
             return { success: false, error: msg };
         }

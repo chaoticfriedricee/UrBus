@@ -81,11 +81,6 @@ const updateUserRoleValidator = [
   query('roleName').notEmpty().withMessage('roleName es requerido'),
 ];
 
-const updatePassengerTypeValidator = [
-  param('userId').notEmpty().withMessage('El userId es requerido'),
-  body('passengerType').isString().withMessage('passengerType debe ser texto').notEmpty().withMessage('passengerType es requerido'),
-];
-
 const getUsersByRoleValidator = [
   query('roleName').notEmpty().withMessage('roleName es requerido'),
 ];
@@ -100,6 +95,5 @@ module.exports = {
   resetPasswordValidator,
   getProfileByIdValidator,
   updateUserRoleValidator,
-  updatePassengerTypeValidator,
   getUsersByRoleValidator,
 };

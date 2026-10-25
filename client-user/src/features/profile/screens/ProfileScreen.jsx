@@ -11,7 +11,7 @@ import useAuthStore from '../../../shared/store/authStore';
 import { useMyStatus } from '../../passengers/hooks/useMyStatus';
 import Button from '../../../shared/components/common/Button';
 import Input from '../../../shared/components/common/Input';
-import { COLORS, SPACING, FONT_SIZE, RADIUS, MANAGER_ROLES, ROLE_LABELS, PASSENGER_TYPE_LABELS } from '../../../shared/constants/theme';
+import { COLORS, SPACING, FONT_SIZE, RADIUS, MANAGER_ROLES, ROLE_LABELS } from '../../../shared/constants/theme';
 
 export default function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
@@ -163,14 +163,6 @@ export default function ProfileScreen() {
                 <View style={styles.infoRow}>
                   <MaterialIcons name="location-on" size={18} color={COLORS.textLight} />
                   <Text style={styles.infoText}>{myPassenger?.address ?? 'Sin dirección registrada'}</Text>
-                </View>
-                <View style={styles.infoDivider} />
-                {/* Solo lectura: el tipo de pasajero lo asigna un administrador */}
-                <View style={styles.infoRow}>
-                  <MaterialIcons name="badge" size={18} color={COLORS.textLight} />
-                  <Text style={styles.infoText}>
-                    {PASSENGER_TYPE_LABELS[user?.passengerType] ?? '—'}
-                  </Text>
                 </View>
               </>
             ) : null}

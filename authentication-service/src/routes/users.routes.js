@@ -7,7 +7,6 @@ const upload = require('../../configs/upload.configuration');
 const { ADMIN_ROLE, DRIVER_ROLE } = require('../utils/role-constants');
 const {
   updateUserRoleValidator,
-  updatePassengerTypeValidator,
   getProfileByIdValidator,
   getUsersByRoleValidator,
 } = require('../dtos/auth.validators');
@@ -25,15 +24,6 @@ router.get('/', adminOnly, usersController.getAllUsers);
 
 // PUT /api/v1/users/:userId/role?roleName=...
 router.put('/:userId/role', adminOnly, updateUserRoleValidator, validate, usersController.updateRole);
-
-// PUT /api/v1/users/:userId/passenger-type — solo ADMIN (el tipo no se elige al registrarse ni al editar el perfil)
-router.put(
-  '/:userId/passenger-type',
-  adminOnly,
-  updatePassengerTypeValidator,
-  validate,
-  usersController.updatePassengerType,
-);
 
 // PUT /api/v1/users/:userId/verify-email
 router.put('/:userId/verify-email', adminOnly, getProfileByIdValidator, validate, usersController.verifyEmailByAdmin);

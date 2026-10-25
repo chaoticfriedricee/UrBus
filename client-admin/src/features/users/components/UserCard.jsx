@@ -27,12 +27,6 @@ const ROLE_COLORS = {
 
 const ROLE_OPTIONS = ['ADMIN_ROLE', 'PASSENGER_ROLE', 'DRIVER_ROLE', 'USER_ROLE'];
 
-// Tipo de pasajero: independiente del rol (no da permisos). Todo usuario nuevo es fijo.
-const PASSENGER_TYPE_LABELS = {
-    FIXED_PASSENGER:      'Pasajero fijo',
-    OCCASIONAL_PASSENGER: 'Pasajero eventual',
-};
-
 function UserAvatar({ name }) {
     const initials = name
         ? name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
@@ -68,14 +62,12 @@ function RoleBadge({ role }) {
 
 export const UserCard = ({ user, currentUserId }) => {
     const changeUserRole = useUserStore((s) => s.changeUserRole);
-    const changePassengerType = useUserStore((s) => s.changePassengerType);
     const verifyEmail = useUserStore((s) => s.verifyEmail);
     const [updating, setUpdating] = useState(false);
-    const [updatingType, setUpdatingType] = useState(false);
     const [verifying, setVerifying] = useState(false);
     const [showInfo, setShowInfo] = useState(false);
 
-    const { id, name, surname, email, role, passengerType, status, isEmailVerified } = user;
+    const { id, name, surname, email, role, status, isEmailVerified } = user;
     const isSelf = String(id) === String(currentUserId);
 
     const handleRoleChange = async (e) => {
@@ -92,15 +84,6 @@ export const UserCard = ({ user, currentUserId }) => {
         setUpdating(true);
         await changeUserRole(id, newRole);
         setUpdating(false);
-    };
-
-    const handlePassengerTypeChange = async (e) => {
-        const newType = e.target.value;
-        if (newType === passengerType) return;
-
-        setUpdatingType(true);
-        await changePassengerType(id, newType);
-        setUpdatingType(false);
     };
 
     const handleVerifyEmail = async () => {
@@ -219,25 +202,6 @@ export const UserCard = ({ user, currentUserId }) => {
                         {verifying ? 'Verificando...' : 'Verificar'}
                     </button>
                 )}
-
-                <select
-                    value={passengerType ?? ''}
-                    onChange={handlePassengerTypeChange}
-                    disabled={updatingType}
-                    title="Cambiar tipo de pasajero"
-                    style={{
-                        padding: '7px 10px', borderRadius: 9,
-                        border: '1.5px solid #e5e7eb', background: '#fff',
-                        color: '#374151', fontSize: 12.5, fontWeight: 600,
-                        cursor: updatingType ? 'not-allowed' : 'pointer',
-                        opacity: updatingType ? 0.6 : 1, flexShrink: 0,
-                    }}
-                >
-                    {!passengerType && <option value="" disabled>Tipo de pasajero</option>}
-                    {Object.entries(PASSENGER_TYPE_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                    ))}
-                </select>
 
                 <select
                     value={role ?? ''}

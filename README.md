@@ -170,25 +170,10 @@ http://localhost:5166/api/v1
 | GET    | /users/{userId}       | Datos de contacto de una cuenta | Sí (JWT)      | ADMIN_ROLE, DRIVER_ROLE |
 | PUT    | /users/{userId}/profile | Editar nombre, apellido, teléfono y foto | Sí (JWT) | El propio usuario o ADMIN_ROLE |
 | PUT    | /users/{userId}/role  | Actualizar rol de usuario       | Sí (JWT)      | ADMIN_ROLE |
-| PUT    | /users/{userId}/passenger-type | Cambiar el tipo de pasajero (`{ passengerType }`) | Sí (JWT) | ADMIN_ROLE |
 | PUT    | /users/{userId}/verify-email | Verificar el correo manualmente | Sí (JWT) | ADMIN_ROLE |
 | GET    | /users/{userId}/roles | Obtener roles de un usuario     | Sí (JWT)      | ADMIN_ROLE |
 | GET    | /users/by-role        | Listar usuarios por rol         | Sí (JWT)      | ADMIN_ROLE |
  
-### Tipo de pasajero
-
-Cada usuario tiene un `passengerType`, independiente de su rol:
-
-| Valor | Descripción |
-| ----- | ----------- |
-| `FIXED_PASSENGER` | Pasajero fijo. **Se asigna automáticamente al registrarse.** |
-| `OCCASIONAL_PASSENGER` | Pasajero eventual. |
-
-* El servidor lo asigna en el registro e ignora cualquier valor (o rol) que envíe el cliente.
-* Editar el propio perfil no lo modifica; solo un `ADMIN_ROLE` puede cambiarlo, desde **Usuarios** en el panel.
-* Cambiarlo nunca cambia el rol ni concede permisos.
-* Al arrancar, el servicio agrega la columna `users.passenger_type` si no existe (`src/database/migrations.js`); los usuarios existentes quedan como `FIXED_PASSENGER`.
-
 ---
  
 ## LocationService

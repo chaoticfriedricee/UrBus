@@ -18,12 +18,6 @@ export const updateUserRole = async (userId, roleName) => {
     });
 };
 
-// PUT /api/v1/users/:userId/passenger-type — requiere ADMIN_ROLE
-// Tipo de pasajero (fijo, eventual); no cambia el rol ni los permisos
-export const updatePassengerType = async (userId, passengerType) => {
-    return await axiosAuth.put(`/users/${userId}/passenger-type`, { passengerType });
-};
-
 // PUT /api/v1/users/:userId/verify-email — requiere ADMIN_ROLE
 // Verificación manual del email, alternativa al envío por SMTP (que no funciona en Render)
 export const verifyUserEmail = async (userId) => {

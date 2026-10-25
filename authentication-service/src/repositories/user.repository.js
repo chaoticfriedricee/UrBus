@@ -99,7 +99,6 @@ async function createUserAsync(userData) {
         email: userData.email,
         password: userData.password,
         status: userData.status,
-        passengerType: userData.passengerType,
       },
       { transaction: t },
     );
@@ -161,10 +160,6 @@ async function existsByUsernameAsync(username) {
   return count > 0;
 }
 
-async function updatePassengerTypeAsync(userId, passengerType) {
-  await User.update({ passengerType }, { where: { id: userId } });
-}
-
 async function updateUserRoleAsync(userId, roleId) {
   const sequelize = User.sequelize;
   await sequelize.transaction(async (t) => {
@@ -189,5 +184,4 @@ module.exports = {
   existsByEmailAsync,
   existsByUsernameAsync,
   updateUserRoleAsync,
-  updatePassengerTypeAsync,
 };
