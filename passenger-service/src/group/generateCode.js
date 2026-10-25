@@ -28,3 +28,20 @@ export const generateUniqueCode = async () => {
 
     return code;
 };
+
+const MAX_CREATE_ATTEMPTS = 5;
+
+// generateUniqueCode comprueba antes de insertar, pero dos peticiones simultáneas
+// podrían obtener el mismo código: el índice único lo impide y aquí se reintenta
+export const createGroupWithUniqueCode = async (data) => {
+    for (let attempt = 1; ; attempt++) {
+        const code = await generateUniqueCode();
+
+        try {
+            return await Group.create({ ...data, code });
+        } catch (err) {
+            const isCodeCollision = err.code === 11000 && err.keyPattern?.code;
+            if (!isCodeCollision || attempt >= MAX_CREATE_ATTEMPTS) throw err;
+        }
+    }
+};

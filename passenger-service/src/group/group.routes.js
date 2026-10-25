@@ -9,8 +9,11 @@ import {
   joinGroup,
   getGroupAccess,
   setGroupLimit,
+  resetGroupLimit,
   getGroupLimit,
-  getMyGroupLimit
+  getMyGroupLimit,
+  getGroupSettings,
+  updateGroupSettings
 } from './group.controller.js';
 
 import { validateJWT } from '../../middlewares/validate-JWT.js';
@@ -42,6 +45,18 @@ router.get(
 );
 
 router.get(
+  '/settings',
+  validateJWT,
+  getGroupSettings
+);
+
+router.put(
+  '/settings',
+  validateJWT,
+  updateGroupSettings
+);
+
+router.get(
   '/limit/me',
   validateJWT,
   getMyGroupLimit
@@ -57,6 +72,12 @@ router.put(
   '/limit/:driverId',
   validateJWT,
   setGroupLimit
+);
+
+router.delete(
+  '/limit/:driverId',
+  validateJWT,
+  resetGroupLimit
 );
 
 router.get(

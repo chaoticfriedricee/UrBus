@@ -17,6 +17,10 @@ axiosPassenger.interceptors.request.use((config) => {
 export const getPassengers = () =>
     axiosPassenger.get('/passengers');
 
+// GET /api/v1/passengers/me  — perfil de pasajero del usuario, con su grupo
+export const getMyPassenger = () =>
+    axiosPassenger.get('/passengers/me');
+
 // POST /api/v1/passengers  — requiere ADMIN_ROLE
 export const createPassenger = (data) =>
     axiosPassenger.post('passengers', data);

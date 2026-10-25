@@ -1,7 +1,16 @@
 import Group from './group.model.js';
 import GroupLimit from './groupLimit.model.js';
 import Passenger from '../passenger/passenger.model.js';
-import { generateUniqueCode } from './generateCode.js';
+import { createGroupWithUniqueCode } from './generateCode.js';
+import {
+  MAX_GROUPS_UPPER_BOUND,
+  parseGroupLimit,
+  getDefaultMaxGroups,
+  setDefaultMaxGroups,
+  countActiveGroups,
+  resolveGroupLimit,
+  limitReachedResponse
+} from './groupLimit.service.js';
 
 // Los grupos creados antes de existir isDeleted no tienen el campo
 const NOT_DELETED = { isDeleted: { $ne: true } };
@@ -25,25 +34,26 @@ export const createGroup = async (req, res, next) => {
       });
     }
 
-    const limitDoc = await GroupLimit.findOne({ driverId: req.user.id });
-    const maxGroups = limitDoc ? limitDoc.maxGroups : 0;
-
-    const activeGroups = await Group.countDocuments({ driverId: req.user.id, isActive: true });
+    // El dueño del grupo es siempre el conductor del token; driverId/code del body se ignoran
+    const driverId = req.user.id;
+    const { maxGroups, activeGroups } = await resolveGroupLimit(driverId);
 
     if (activeGroups >= maxGroups) {
-      return res.status(403).json({
-        success: false,
-        message: `Ha alcanzado el límite de grupos permitidos (${maxGroups}). Solicite un límite mayor a un administrador`
-      });
+      return limitReachedResponse(res, { maxGroups, activeGroups });
     }
 
-    const code = await generateUniqueCode();
+    const group = await createGroupWithUniqueCode({ name: name.trim(), driverId });
 
-    const group = await Group.create({
-      name: name.trim(),
-      code,
-      driverId: req.user.id
-    });
+    // MongoDB corre sin réplica (no hay transacciones): dos peticiones simultáneas
+    // pueden pasar la comprobación anterior. Se vuelve a contar tras insertar y, si
+    // se excedió el límite, se deshace la creación; así nunca quedan más grupos de
+    // los permitidos (en el peor caso ambas peticiones se rechazan)
+    const activeAfter = await countActiveGroups(driverId);
+
+    if (activeAfter > maxGroups) {
+      await Group.deleteOne({ _id: group._id });
+      return limitReachedResponse(res, { maxGroups, activeGroups: activeAfter - 1 });
+    }
 
     res.status(201).json({
       success: true,
@@ -159,23 +169,36 @@ export const updateGroup = async (req, res, next) => {
     // Reactivar un grupo cuenta contra el límite del conductor (el admin puede excederlo)
     const isReactivating = (isActive === true || isActive === 'true') && !group.isActive;
 
-    if (isReactivating && req.user.role === 'DRIVER_ROLE') {
-      const limitDoc = await GroupLimit.findOne({ driverId: group.driverId });
-      const maxGroups = limitDoc ? limitDoc.maxGroups : 0;
-      const activeGroups = await Group.countDocuments({ driverId: group.driverId, isActive: true });
+    const checkLimit = isReactivating && req.user.role === 'DRIVER_ROLE';
+    let maxGroups;
 
-      if (activeGroups >= maxGroups) {
-        return res.status(403).json({
-          success: false,
-          message: `Ha alcanzado el límite de grupos permitidos (${maxGroups}). Solicite un límite mayor a un administrador`
-        });
+    if (checkLimit) {
+      const limit = await resolveGroupLimit(group.driverId);
+      maxGroups = limit.maxGroups;
+
+      if (limit.activeGroups >= maxGroups) {
+        return limitReachedResponse(res, limit);
       }
     }
 
+    const previousName = group.name;
     if (name !== undefined) group.name = name.trim();
     if (isActive !== undefined) group.isActive = isActive;
 
     await group.save();
+
+    // Misma verificación posterior que al crear: si otra petición simultánea ocupó
+    // el cupo, se revierte este cambio
+    if (checkLimit) {
+      const activeAfter = await countActiveGroups(group.driverId);
+
+      if (activeAfter > maxGroups) {
+        group.isActive = false;
+        group.name = previousName;
+        await group.save();
+        return limitReachedResponse(res, { maxGroups, activeGroups: activeAfter - 1 });
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -256,29 +279,32 @@ export const joinGroup = async (req, res, next) => {
       });
     }
 
-    const passenger = await Passenger.findOne({ userId: req.user.id, isActive: true });
+    // Un pasajero pertenece a un solo grupo (groupId); unirse a otro lo cambia de grupo.
+    // La condición groupId != grupo hace la asignación atómica: dos peticiones
+    // simultáneas con el mismo código no pueden "unirlo dos veces"
+    const passenger = await Passenger.findOneAndUpdate(
+      { userId: req.user.id, isActive: true, groupId: { $ne: group._id } },
+      { $set: { groupId: group._id } },
+      { new: true }
+    );
 
     if (!passenger) {
-      return res.status(404).json({
-        success: false,
-        message: 'No tienes un perfil de pasajero vinculado'
-      });
-    }
+      const linked = await Passenger.exists({ userId: req.user.id, isActive: true });
 
-    if (passenger.groupId && passenger.groupId.equals(group._id)) {
-      return res.status(409).json({
-        success: false,
-        message: 'Ya perteneces a este grupo'
-      });
+      return linked
+        ? res.status(409).json({
+          success: false,
+          message: `Ya perteneces al grupo ${group.name}`
+        })
+        : res.status(404).json({
+          success: false,
+          message: 'No tienes un perfil de pasajero vinculado'
+        });
     }
-
-    // Un pasajero pertenece a un solo grupo (groupId); unirse a otro lo cambia de grupo
-    passenger.groupId = group._id;
-    await passenger.save();
 
     res.status(200).json({
       success: true,
-      message: 'Te uniste al grupo correctamente',
+      message: `Te uniste al grupo ${group.name}`,
       data: {
         group: { _id: group._id, name: group.name, code: group.code, isActive: group.isActive },
         passenger: { _id: passenger._id, name: passenger.name, groupId: passenger.groupId }
@@ -338,6 +364,8 @@ export const getGroupAccess = async (req, res, next) => {
   }
 };
 
+const INVALID_LIMIT_MESSAGE = `El límite de grupos debe ser un número entero entre 0 y ${MAX_GROUPS_UPPER_BOUND}`;
+
 export const setGroupLimit = async (req, res, next) => {
   try {
 
@@ -349,16 +377,18 @@ export const setGroupLimit = async (req, res, next) => {
     }
 
     const { driverId } = req.params;
-    const { maxGroups } = req.body;
+    const maxGroups = parseGroupLimit(req.body?.maxGroups);
 
-    if (maxGroups === undefined || maxGroups === null || maxGroups < 0) {
+    if (maxGroups === null) {
       return res.status(400).json({
         success: false,
-        message: 'El límite de grupos es obligatorio y debe ser mayor o igual a 0'
+        message: INVALID_LIMIT_MESSAGE
       });
     }
 
-    const limit = await GroupLimit.findOneAndUpdate(
+    // Bajar el límite no toca los grupos existentes: solo impide crear o reactivar
+    // más hasta que el conductor tenga menos grupos activos que el nuevo límite
+    await GroupLimit.findOneAndUpdate(
       { driverId },
       { driverId, maxGroups },
       { new: true, upsert: true }
@@ -367,7 +397,32 @@ export const setGroupLimit = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Límite de grupos actualizado',
-      data: limit
+      data: await resolveGroupLimit(driverId)
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+// DELETE /groups/limit/:driverId — quita el límite propio del conductor y vuelve al general
+export const resetGroupLimit = async (req, res, next) => {
+  try {
+
+    if (req.user.role !== 'ADMIN_ROLE') {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para asignar límites de grupos'
+      });
+    }
+
+    const { driverId } = req.params;
+    await GroupLimit.deleteOne({ driverId });
+
+    res.status(200).json({
+      success: true,
+      message: 'El conductor usa ahora el límite general',
+      data: await resolveGroupLimit(driverId)
     });
 
   } catch (err) {
@@ -387,11 +442,9 @@ export const getGroupLimit = async (req, res, next) => {
       });
     }
 
-    const limit = await GroupLimit.findOne({ driverId });
-
     res.status(200).json({
       success: true,
-      data: { driverId, maxGroups: limit?.maxGroups ?? 0 }
+      data: await resolveGroupLimit(driverId)
     });
 
   } catch (err) {
@@ -409,11 +462,63 @@ export const getMyGroupLimit = async (req, res, next) => {
       });
     }
 
-    const limit = await GroupLimit.findOne({ driverId: req.user.id });
+    res.status(200).json({
+      success: true,
+      data: await resolveGroupLimit(req.user.id)
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /groups/settings — configuración general de grupos (solo ADMIN)
+export const getGroupSettings = async (req, res, next) => {
+  try {
+
+    if (req.user.role !== 'ADMIN_ROLE') {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para ver la configuración de grupos'
+      });
+    }
 
     res.status(200).json({
       success: true,
-      data: { driverId: req.user.id, maxGroups: limit?.maxGroups ?? 0 }
+      data: { maxGroupsPerDriver: await getDefaultMaxGroups() }
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+// PUT /groups/settings — cambia el límite general de grupos por conductor (solo ADMIN)
+export const updateGroupSettings = async (req, res, next) => {
+  try {
+
+    if (req.user.role !== 'ADMIN_ROLE') {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permisos para cambiar la configuración de grupos'
+      });
+    }
+
+    const maxGroupsPerDriver = parseGroupLimit(req.body?.maxGroupsPerDriver);
+
+    if (maxGroupsPerDriver === null) {
+      return res.status(400).json({
+        success: false,
+        message: INVALID_LIMIT_MESSAGE
+      });
+    }
+
+    await setDefaultMaxGroups(maxGroupsPerDriver);
+
+    res.status(200).json({
+      success: true,
+      message: 'Límite general de grupos actualizado',
+      data: { maxGroupsPerDriver }
     });
 
   } catch (err) {

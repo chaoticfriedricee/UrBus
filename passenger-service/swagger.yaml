@@ -168,7 +168,170 @@ paths:
         '404':
           description: Código inválido, grupo inactivo/eliminado o sin perfil de pasajero vinculado
         '409':
-          description: Ya pertenece a ese grupo
+          description: Ya pertenece a ese grupo (también si dos peticiones llegan a la vez)
+
+  /groups:
+    post:
+      tags:
+        - Groups
+      summary: Crear un grupo (conductor)
+      operationId: createGroup
+      description: |
+        Solo "DRIVER_ROLE". El dueño es siempre el conductor del token y el código
+        de unión se genera en el servidor (driverId/code del body se ignoran).
+        Se rechaza si el conductor ya tiene tantos grupos activos como su límite
+        efectivo (el propio asignado por un admin o, si no tiene, el general;
+        por defecto 2). Los grupos inactivos o eliminados no cuentan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: Ruta mañana
+      responses:
+        '201':
+          description: Grupo creado con su código único
+        '400':
+          description: Nombre vacío o no es texto
+        '403':
+          description: El rol no es conductor, o se alcanzó el límite de grupos
+          content:
+            application/json:
+              example:
+                success: false
+                message: Alcanzaste el límite de 2 grupos activos por conductor. Desactiva o elimina un grupo, o solicita a un administrador un límite mayor
+                error: GROUP_LIMIT_REACHED
+                data:
+                  maxGroups: 2
+                  activeGroups: 2
+
+  /groups/settings:
+    get:
+      tags:
+        - Groups
+      summary: Configuración general de grupos (admin)
+      operationId: getGroupSettings
+      responses:
+        '200':
+          description: Configuración actual
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  maxGroupsPerDriver: 2
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags:
+        - Groups
+      summary: Cambiar el límite general de grupos por conductor (admin)
+      operationId: updateGroupSettings
+      description: |
+        Aplica a los conductores sin un límite propio. Bajarlo no elimina grupos
+        existentes: solo impide crear o reactivar más hasta quedar por debajo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - maxGroupsPerDriver
+              properties:
+                maxGroupsPerDriver:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                  example: 3
+      responses:
+        '200':
+          description: Límite general actualizado
+        '400':
+          description: No es un entero entre 0 y 100
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /groups/limit/me:
+    get:
+      tags:
+        - Groups
+      summary: Límite efectivo del conductor del token
+      operationId: getMyGroupLimit
+      responses:
+        '200':
+          description: Límite y grupos activos
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  driverId: d1r2v3r4
+                  maxGroups: 2
+                  isCustom: false
+                  defaultMaxGroups: 2
+                  activeGroups: 1
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /groups/limit/{driverId}:
+    parameters:
+      - name: driverId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Groups
+      summary: Límite efectivo de un conductor (admin o el propio conductor)
+      operationId: getGroupLimit
+      responses:
+        '200':
+          description: Igual que /groups/limit/me
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags:
+        - Groups
+      summary: Asignar un límite propio a un conductor (admin)
+      operationId: setGroupLimit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - maxGroups
+              properties:
+                maxGroups:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+      responses:
+        '200':
+          description: Límite asignado
+        '400':
+          description: No es un entero entre 0 y 100
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags:
+        - Groups
+      summary: Quitar el límite propio; el conductor vuelve al general (admin)
+      operationId: resetGroupLimit
+      responses:
+        '200':
+          description: El conductor usa el límite general
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /groups/access:
     get:

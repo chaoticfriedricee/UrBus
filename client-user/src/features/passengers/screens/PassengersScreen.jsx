@@ -108,7 +108,7 @@ function ManagerPassengersView() {
   );
 }
 
-function JoinGroupCard({ loading, onJoin }) {
+function JoinGroupCard({ loading, currentGroup, onJoin }) {
   const [code, setCode] = useState('');
   const [joining, setJoining] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -122,19 +122,28 @@ function JoinGroupCard({ loading, onJoin }) {
     setFeedback(null);
     const result = await onJoin(code.trim());
     setJoining(false);
-    if (!result?.success) setFeedback({ ok: false, text: result?.error ?? 'No se pudo unir al grupo' });
+    if (result?.success) {
+      setCode('');
+      const name = result.data?.group?.name;
+      setFeedback({ ok: true, text: name ? `Te uniste al grupo ${name}` : 'Te uniste al grupo' });
+    } else {
+      setFeedback({ ok: false, text: result?.error ?? 'No se pudo unir al grupo' });
+    }
   };
 
   return (
     <Card style={styles.groupCard}>
-      <Text style={styles.groupTitle}>Únete a un grupo</Text>
-      <Text style={styles.groupSubtitle}>Ingresa el código que te compartió tu conductor</Text>
+      <Text style={styles.groupTitle}>Unirme a un grupo</Text>
+      <Text style={styles.groupSubtitle}>
+        Ingresa el código de unión que te compartió tu conductor.
+        {currentGroup ? ` Si te unes a otro grupo dejarás «${currentGroup.name}».` : ''}
+      </Text>
       <Input
         icon="qr-code"
         placeholder="Ej. A3F9K2"
         autoCapitalize="characters"
         value={code}
-        onChangeText={setCode}
+        onChangeText={(text) => { setCode(text.toUpperCase()); setFeedback(null); }}
         style={styles.groupInput}
       />
       {feedback ? (
@@ -221,11 +230,9 @@ function MyStatusView() {
             <Text style={styles.statusLabel}>El conductor marca tu asistencia al abordar.</Text>
           </Card>
 
-          {group ? (
-            <MyGroupCard group={group} mates={groupMates} />
-          ) : (
-            <JoinGroupCard loading={loading} onJoin={joinGroup} />
-          )}
+          {group ? <MyGroupCard group={group} mates={groupMates} /> : null}
+          {/* Siempre visible: un pasajero pertenece a un solo grupo y unirse a otro lo cambia */}
+          <JoinGroupCard loading={loading} currentGroup={group} onJoin={joinGroup} />
         </>
       )}
     </ScrollView>

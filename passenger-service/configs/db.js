@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import Group from '../src/group/group.model.js';
 import GroupLimit from '../src/group/groupLimit.model.js';
 import Passenger from '../src/passenger/passenger.model.js';
+import Setting from '../src/settings/setting.model.js';
 
 export const dbConnection = async () => {
     try {
@@ -48,7 +49,7 @@ export const dbConnection = async () => {
 // (código de grupo único, una sola membresía activa por cuenta). Se crean aquí de
 // forma explícita; si los datos existentes los violan, se avisa sin tumbar el servicio.
 export const ensureIndexes = async () => {
-    for (const model of [Group, GroupLimit, Passenger]) {
+    for (const model of [Group, GroupLimit, Passenger, Setting]) {
         try {
             await model.createIndexes();
         } catch (error) {

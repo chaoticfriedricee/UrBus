@@ -8,15 +8,27 @@ import {
     getMyGroupLimit,
     getGroupLimit,
     setGroupLimit,
+    resetGroupLimit,
+    getGroupSettings,
+    updateGroupSettings,
+    joinGroup,
 } from '../../../shared/api/group.js';
+import { getMyPassenger } from '../../../shared/api/passenger.js';
 import { showSuccess, showError } from '../../../shared/utils/toast.js';
 
 export const useGroupStore = create((set, get) => ({
     groups:       [],
     loading:      false,
     error:        null,
-    myLimit:      0,
+    // null hasta que responde /groups/limit/me
+    myLimit:      null,
+    // driverId -> { maxGroups, isCustom } (isCustom: límite propio en vez del general)
     driverLimits: {},
+    defaultLimit: null,
+    // Pasajero: su perfil con el grupo al que pertenece (groupId poblado)
+    myPassenger:        null,
+    myPassengerLoading: false,
+    notLinked:          false,
     activeGroup:  null,
     activeLoading: false,
 
@@ -57,8 +69,9 @@ export const useGroupStore = create((set, get) => ({
             return { success: true, data: data.data };
         } catch (err) {
             const msg = err.response?.data?.message || 'Error al crear grupo';
-            set({ error: msg });
             showError(msg);
+            // El límite pudo cambiar (lo bajó un admin): se sincroniza el contador
+            if (err.response?.data?.error === 'GROUP_LIMIT_REACHED') get().fetchMyLimit();
             return { success: false, error: msg };
         } finally {
             set({ loading: false });
@@ -78,6 +91,7 @@ export const useGroupStore = create((set, get) => ({
             set({ groups: snapshot });
             const msg = err.response?.data?.message || 'Error al editar grupo';
             showError(msg);
+            if (err.response?.data?.error === 'GROUP_LIMIT_REACHED') get().fetchMyLimit();
             return { success: false, error: msg };
         }
     },
@@ -109,28 +123,102 @@ export const useGroupStore = create((set, get) => ({
         }
     },
 
+    setDriverLimitFromResponse: (driverId, limit) => set((state) => ({
+        driverLimits: {
+            ...state.driverLimits,
+            [driverId]: { maxGroups: limit?.maxGroups ?? 0, isCustom: Boolean(limit?.isCustom) },
+        },
+    })),
+
     fetchDriverLimit: async (driverId) => {
         try {
             const { data } = await getGroupLimit(driverId);
-            set((state) => ({
-                driverLimits: { ...state.driverLimits, [driverId]: data.data?.maxGroups ?? 0 },
-            }));
+            get().setDriverLimitFromResponse(driverId, data.data);
         } catch (err) {
             showError(err.response?.data?.message || 'Error al cargar el límite del conductor');
         }
     },
 
     updateDriverLimit: async (driverId, maxGroups) => {
-        const snapshot = get().driverLimits[driverId];
-        set((state) => ({ driverLimits: { ...state.driverLimits, [driverId]: maxGroups } }));
         try {
-            await setGroupLimit(driverId, maxGroups);
+            const { data } = await setGroupLimit(driverId, maxGroups);
+            get().setDriverLimitFromResponse(driverId, data.data);
             showSuccess('Límite de grupos actualizado');
             return { success: true };
         } catch (err) {
-            set((state) => ({ driverLimits: { ...state.driverLimits, [driverId]: snapshot } }));
             const msg = err.response?.data?.message || 'Error al actualizar el límite';
             showError(msg);
+            return { success: false, error: msg };
+        }
+    },
+
+    resetDriverLimit: async (driverId) => {
+        try {
+            const { data } = await resetGroupLimit(driverId);
+            get().setDriverLimitFromResponse(driverId, data.data);
+            showSuccess('El conductor usa ahora el límite general');
+            return { success: true };
+        } catch (err) {
+            const msg = err.response?.data?.message || 'Error al restablecer el límite';
+            showError(msg);
+            return { success: false, error: msg };
+        }
+    },
+
+    fetchDefaultLimit: async () => {
+        try {
+            const { data } = await getGroupSettings();
+            set({ defaultLimit: data.data?.maxGroupsPerDriver ?? null });
+        } catch (err) {
+            showError(err.response?.data?.message || 'Error al cargar el límite general');
+        }
+    },
+
+    updateDefaultLimit: async (maxGroupsPerDriver) => {
+        try {
+            const { data } = await updateGroupSettings({ maxGroupsPerDriver });
+            set((state) => ({
+                defaultLimit: data.data?.maxGroupsPerDriver,
+                // Los conductores sin límite propio pasan a usar el nuevo valor
+                driverLimits: Object.fromEntries(
+                    Object.entries(state.driverLimits).map(([id, limit]) => [
+                        id,
+                        limit.isCustom ? limit : { ...limit, maxGroups: data.data?.maxGroupsPerDriver },
+                    ])
+                ),
+            }));
+            showSuccess('Límite general de grupos actualizado');
+            return { success: true };
+        } catch (err) {
+            const msg = err.response?.data?.message || 'Error al actualizar el límite general';
+            showError(msg);
+            return { success: false, error: msg };
+        }
+    },
+
+    fetchMyPassenger: async () => {
+        try {
+            set({ myPassengerLoading: true, notLinked: false });
+            const { data } = await getMyPassenger();
+            set({ myPassenger: data.data ?? null });
+        } catch (err) {
+            if (err.response?.status === 404) {
+                set({ myPassenger: null, notLinked: true });
+            } else {
+                showError(err.response?.data?.message || 'Error al cargar tu grupo');
+            }
+        } finally {
+            set({ myPassengerLoading: false });
+        }
+    },
+
+    joinGroupByCode: async (code) => {
+        try {
+            const { data } = await joinGroup(code);
+            await get().fetchMyPassenger();
+            return { success: true, group: data.data?.group };
+        } catch (err) {
+            const msg = err.response?.data?.message || 'No se pudo unir al grupo';
             return { success: false, error: msg };
         }
     },

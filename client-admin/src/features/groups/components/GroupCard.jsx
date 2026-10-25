@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { showSuccess } from '../../../shared/utils/toast.js';
+import { showSuccess, showError } from '../../../shared/utils/toast.js';
+import { copyToClipboard } from '../../../shared/utils/clipboard.js';
 
 function IconBtn({ onClick, title, color, children }) {
     return (
@@ -25,9 +26,12 @@ export const GroupCard = ({ group, canManage, onView, onEdit, onDelete, onToggle
     const { name, code, isActive, passengerCount } = group;
     const [copied, setCopied] = useState(false);
 
-    const handleCopy = (e) => {
+    const handleCopy = async (e) => {
         e.stopPropagation();
-        navigator.clipboard?.writeText(code);
+        if (!(await copyToClipboard(code))) {
+            showError(`No se pudo copiar. El código es ${code}`);
+            return;
+        }
         setCopied(true);
         showSuccess('Código copiado');
         setTimeout(() => setCopied(false), 1500);
@@ -77,7 +81,7 @@ export const GroupCard = ({ group, canManage, onView, onEdit, onDelete, onToggle
             }}>
                 <button
                     onClick={handleCopy}
-                    title="Copiar código"
+                    title="Copiar código de unión"
                     style={{
                         display: 'flex', alignItems: 'center', gap: 6,
                         padding: '7px 12px', borderRadius: 9,

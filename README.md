@@ -265,7 +265,11 @@ http://localhost:3011/urbus/v1/passengers
 | DELETE | /:id     | Eliminar (soft delete; libera a sus pasajeros) | ADMIN_ROLE, DRIVER_ROLE dueño |
 | POST   | /join    | Unirse con `{ code }` | USER_ROLE, PASSENGER_ROLE con perfil vinculado |
 | GET    | /access  | Grupos a los que tiene acceso el usuario del token (uso interno de post y location) | Cualquiera autenticado |
-| GET/PUT | /limit/... | Límite de grupos por conductor | ADMIN_ROLE / el propio conductor |
+| GET    | /limit/me | Límite efectivo y grupos activos del conductor del token | DRIVER_ROLE |
+| GET    | /limit/:driverId | Límite efectivo de un conductor | ADMIN_ROLE / el propio conductor |
+| PUT    | /limit/:driverId | Asignar un límite propio `{ maxGroups }` | ADMIN_ROLE |
+| DELETE | /limit/:driverId | Quitar el límite propio (vuelve al general) | ADMIN_ROLE |
+| GET/PUT | /settings | Límite general por conductor `{ maxGroupsPerDriver }` (por defecto 2) | ADMIN_ROLE |
 
 Reglas:
 
@@ -273,7 +277,10 @@ Reglas:
 * El código se valida en el servidor y se resuelve al grupo y su conductor; los grupos inactivos o eliminados no aceptan pasajeros.
 * Un pasajero pertenece a **un solo grupo** a la vez (`Passenger.groupId`, tal como ya estaba en el esquema). Unirse de nuevo al mismo grupo responde 409; unirse a otro grupo lo cambia de grupo.
 * Para unirse, la cuenta debe tener un perfil de pasajero vinculado, que crea un administrador o conductor (modelo de aprobación existente).
-* Al arrancar se crean los índices únicos `groups.code` y "un perfil de pasajero activo por `userId`" (`ensureIndexes` en `configs/db.js`).
+* Al arrancar se crean los índices únicos `groups.code`, `settings.key` y "un perfil de pasajero activo por `userId`" (`ensureIndexes` en `configs/db.js`).
+* **Límite de grupos:** cada conductor puede tener como máximo N grupos **activos** (los desactivados o eliminados no cuentan; reactivar uno vuelve a pasar por el límite). N es su límite propio si un administrador se lo asignó o, si no, el límite general guardado en la colección `settings` (2 si nunca se cambió). Se configura en client-admin → Grupos → «Límites por conductor».
+* Bajar un límite no elimina ni desactiva grupos ni membresías: solo impide crear o reactivar grupos hasta que el conductor tenga menos grupos activos que el límite.
+* MongoDB corre sin réplica, así que no hay transacciones: tras crear o reactivar un grupo se vuelve a contar y, si una petición simultánea hizo que se excediera el límite, se deshace el cambio. Unirse a un grupo es una actualización atómica condicionada, por lo que dos peticiones simultáneas no duplican la membresía.
  
 ---
  

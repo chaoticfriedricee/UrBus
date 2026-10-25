@@ -36,7 +36,8 @@ export const AppRouter = () => {
         <Route
           path='groups'
           element={
-            <RoleGuard allowedRoles={['ADMIN_ROLE', 'DRIVER_ROLE']}>
+            // Cada rol ve su propia vista: admin (todos + límites), conductor (los suyos), pasajero (unirse)
+            <RoleGuard allowedRoles={['ADMIN_ROLE', 'DRIVER_ROLE', 'PASSENGER_ROLE', 'USER_ROLE']}>
               <GroupListPage />
             </RoleGuard>
           }

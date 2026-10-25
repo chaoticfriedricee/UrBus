@@ -45,3 +45,19 @@ export const getGroupLimit = (driverId) =>
 // PUT /api/v1/groups/limit/:driverId — requiere ADMIN_ROLE
 export const setGroupLimit = (driverId, maxGroups) =>
     axiosGroup.put(`/groups/limit/${driverId}`, { maxGroups });
+
+// DELETE /api/v1/groups/limit/:driverId — requiere ADMIN_ROLE (vuelve al límite general)
+export const resetGroupLimit = (driverId) =>
+    axiosGroup.delete(`/groups/limit/${driverId}`);
+
+// GET /api/v1/groups/settings — requiere ADMIN_ROLE
+export const getGroupSettings = () =>
+    axiosGroup.get('/groups/settings');
+
+// PUT /api/v1/groups/settings — requiere ADMIN_ROLE
+export const updateGroupSettings = (data) =>
+    axiosGroup.put('/groups/settings', data);
+
+// POST /api/v1/groups/join — requiere PASSENGER_ROLE o USER_ROLE
+export const joinGroup = (code) =>
+    axiosGroup.post('/groups/join', { code });

@@ -14,6 +14,8 @@ const { createApp } = await import('../configs/app.js');
 const { ensureIndexes } = await import('../configs/db.js');
 const { default: Passenger } = await import('../src/passenger/passenger.model.js');
 const { default: Group } = await import('../src/group/group.model.js');
+const { default: GroupLimit } = await import('../src/group/groupLimit.model.js');
+const { default: Setting } = await import('../src/settings/setting.model.js');
 
 const MONGO_URI = process.env.TEST_URI_MONGODB || 'mongodb://localhost:27017/urbus_passenger_test';
 
@@ -77,7 +79,7 @@ after(async () => {
 });
 
 beforeEach(async () => {
-    await Promise.all([Group.deleteMany({}), Passenger.deleteMany({})]);
+    await Promise.all([Group.deleteMany({}), Passenger.deleteMany({}), GroupLimit.deleteMany({}), Setting.deleteMany({})]);
     await setLimit('driver-a', 5);
     await setLimit('driver-b', 5);
 });
@@ -285,4 +287,280 @@ test('GET /groups/access describe los grupos a los que tiene acceso cada usuario
     assert.equal((await request('GET', '/groups/access')).status, 401);
     const refresh = jwt.sign({ sub: 'user-5', type: 'refresh' }, process.env.JWT_SECRET, { issuer: 'UrBus', audience: 'UrBus' });
     assert.equal((await request('GET', '/groups/access', { token: refresh })).status, 401);
+});
+
+// ── Límite de grupos por conductor ────────────────────────────────────────────
+// driver-a y driver-b tienen un límite propio de 5 (beforeEach); los demás
+// conductores usan el límite general.
+
+const setDefaultLimit = (maxGroupsPerDriver, token = ADMIN) =>
+    request('PUT', '/groups/settings', { token, body: { maxGroupsPerDriver } });
+
+const activeGroupsOf = (driverId) => Group.countDocuments({ driverId, isActive: true });
+
+test('el límite general de grupos por conductor es 2 por defecto', async () => {
+    const driverC = tokenFor('driver-c', 'DRIVER_ROLE');
+
+    const settings = await request('GET', '/groups/settings', { token: ADMIN });
+    assert.equal(settings.status, 200);
+    assert.equal(settings.body.data.maxGroupsPerDriver, 2);
+
+    const me = await request('GET', '/groups/limit/me', { token: driverC });
+    assert.deepEqual(me.body.data, {
+        driverId: 'driver-c', maxGroups: 2, isCustom: false, defaultMaxGroups: 2, activeGroups: 0
+    });
+
+    await createGroup(driverC, 'Uno');
+    await createGroup(driverC, 'Dos');
+
+    const third = await request('POST', '/groups', { token: driverC, body: { name: 'Tres' } });
+    assert.equal(third.status, 403);
+    assert.equal(third.body.error, 'GROUP_LIMIT_REACHED');
+    assert.match(third.body.message, /límite de 2 grupos activos/);
+    assert.deepEqual(third.body.data, { maxGroups: 2, activeGroups: 2 });
+    assert.equal(await activeGroupsOf('driver-c'), 2);
+});
+
+test('un administrador cambia el límite general y los conductores pueden crear hasta él', async () => {
+    const driverC = tokenFor('driver-c', 'DRIVER_ROLE');
+
+    const update = await setDefaultLimit(3);
+    assert.equal(update.status, 200);
+    assert.equal(update.body.data.maxGroupsPerDriver, 3);
+    assert.equal((await request('GET', '/groups/settings', { token: ADMIN })).body.data.maxGroupsPerDriver, 3);
+
+    for (const name of ['Uno', 'Dos', 'Tres']) await createGroup(driverC, name);
+    assert.equal((await request('POST', '/groups', { token: driverC, body: { name: 'Cuatro' } })).status, 403);
+
+    const me = await request('GET', '/groups/limit/me', { token: driverC });
+    assert.equal(me.body.data.maxGroups, 3);
+    assert.equal(me.body.data.activeGroups, 3);
+});
+
+test('el límite general solo lo ve y lo cambia un administrador, y debe ser un entero válido', async () => {
+    for (const token of [DRIVER_A, tokenFor('u1', 'USER_ROLE'), tokenFor('p1', 'PASSENGER_ROLE')]) {
+        assert.equal((await setDefaultLimit(50, token)).status, 403);
+        assert.equal((await request('GET', '/groups/settings', { token })).status, 403);
+    }
+    assert.equal((await request('PUT', '/groups/settings', { body: { maxGroupsPerDriver: 50 } })).status, 401);
+
+    for (const invalid of [-1, 1.5, 'abc', 101, null, true, '', { $gt: 0 }]) {
+        const res = await setDefaultLimit(invalid);
+        assert.equal(res.status, 400, `valor ${JSON.stringify(invalid)}`);
+    }
+    assert.equal((await request('PUT', '/groups/settings', { token: ADMIN })).status, 400);
+
+    assert.equal((await request('GET', '/groups/settings', { token: ADMIN })).body.data.maxGroupsPerDriver, 2);
+});
+
+test('el límite propio de un conductor tiene prioridad y se puede quitar para volver al general', async () => {
+    await setDefaultLimit(3);
+    assert.equal((await setLimit('driver-c', 1)).body.data.maxGroups, 1);
+
+    const limit = await request('GET', '/groups/limit/driver-c', { token: ADMIN });
+    assert.equal(limit.body.data.maxGroups, 1);
+    assert.equal(limit.body.data.isCustom, true);
+    assert.equal(limit.body.data.defaultMaxGroups, 3);
+
+    const reset = await request('DELETE', '/groups/limit/driver-c', { token: ADMIN });
+    assert.equal(reset.status, 200);
+    assert.equal(reset.body.data.maxGroups, 3);
+    assert.equal(reset.body.data.isCustom, false);
+
+    // Valores inválidos en el límite propio
+    for (const invalid of [-1, 'abc', 2.5, null]) {
+        assert.equal((await setLimit('driver-c', invalid)).status, 400);
+    }
+});
+
+test('un conductor no ve ni modifica límites ajenos ni el suyo', async () => {
+    assert.equal((await request('GET', '/groups/limit/driver-b', { token: DRIVER_A })).status, 403);
+    assert.equal((await request('PUT', '/groups/limit/driver-a', { token: DRIVER_A, body: { maxGroups: 99 } })).status, 403);
+    assert.equal((await request('DELETE', '/groups/limit/driver-a', { token: DRIVER_A })).status, 403);
+    assert.equal((await request('GET', '/groups/limit/me', { token: tokenFor('u1', 'USER_ROLE') })).status, 403);
+
+    assert.equal((await request('GET', '/groups/limit/me', { token: DRIVER_A })).body.data.maxGroups, 5);
+});
+
+test('el límite no se puede saltar con peticiones directas', async () => {
+    const driverC = tokenFor('driver-c', 'DRIVER_ROLE');
+    await createGroup(driverC, 'Uno');
+    await createGroup(driverC, 'Dos');
+
+    // Parámetros manipulados en el body
+    const forged = await request('POST', '/groups', {
+        token: driverC,
+        body: { name: 'Tres', maxGroups: 99, driverId: 'driver-z', isActive: true }
+    });
+    assert.equal(forged.status, 403);
+
+    // Desactivar uno libera el cupo, pero reactivarlo cuando ya se ocupó se rechaza
+    const [first] = (await request('GET', '/groups', { token: driverC })).body.data;
+    await request('PATCH', `/groups/${first._id}`, { token: driverC, body: { isActive: false } });
+    await createGroup(driverC, 'Reemplazo');
+
+    for (const isActive of [true, 'true']) {
+        const reactivate = await request('PATCH', `/groups/${first._id}`, { token: driverC, body: { isActive, name: 'Cambiado' } });
+        assert.equal(reactivate.status, 403);
+        assert.equal(reactivate.body.error, 'GROUP_LIMIT_REACHED');
+    }
+    const stored = await Group.findById(first._id);
+    assert.equal(stored.isActive, false);
+    assert.equal(stored.name, first.name);
+
+    assert.equal(await activeGroupsOf('driver-c'), 2);
+    assert.equal(await Group.countDocuments({ driverId: 'driver-z' }), 0);
+});
+
+test('peticiones simultáneas no superan el límite', async () => {
+    const driverC = tokenFor('driver-c', 'DRIVER_ROLE');
+    await createGroup(driverC, 'Existente');
+
+    const results = await Promise.all(
+        Array.from({ length: 8 }, (_, i) => request('POST', '/groups', { token: driverC, body: { name: `Carrera ${i}` } }))
+    );
+
+    assert.ok(results.every((r) => r.status === 201 || r.status === 403));
+    assert.ok(await activeGroupsOf('driver-c') <= 2);
+    // Los rechazados no dejan grupos a medio crear
+    assert.equal(await Group.countDocuments({ driverId: 'driver-c' }), await activeGroupsOf('driver-c'));
+});
+
+test('bajar el límite conserva los grupos y membresías existentes, pero impide crear más', async () => {
+    const groups = [];
+    for (const name of ['G1', 'G2', 'G3']) groups.push(await createGroup(DRIVER_A, name));
+    const passenger = await linkPassenger('user-lower');
+    await request('POST', '/groups/join', { token: passenger.token, body: { code: groups[0].code } });
+
+    await setLimit('driver-a', 1);
+
+    const list = await request('GET', '/groups', { token: DRIVER_A });
+    assert.equal(list.body.data.length, 3);
+    assert.ok(list.body.data.every((g) => g.isActive));
+    assert.equal(String((await Passenger.findById(passenger._id)).groupId), groups[0]._id);
+
+    const me = await request('GET', '/groups/limit/me', { token: DRIVER_A });
+    assert.equal(me.body.data.maxGroups, 1);
+    assert.equal(me.body.data.activeGroups, 3);
+
+    // Sigue gestionando sus grupos (editar nombre), pero no puede crear
+    assert.equal((await request('PATCH', `/groups/${groups[1]._id}`, { token: DRIVER_A, body: { name: 'G2 bis' } })).status, 200);
+    assert.equal((await request('POST', '/groups', { token: DRIVER_A, body: { name: 'G4' } })).status, 403);
+
+    // Con 1 activo (= límite) todavía no puede; con 0 (< límite), sí
+    await request('PATCH', `/groups/${groups[1]._id}`, { token: DRIVER_A, body: { isActive: false } });
+    await request('DELETE', `/groups/${groups[2]._id}`, { token: DRIVER_A });
+    assert.equal((await request('POST', '/groups', { token: DRIVER_A, body: { name: 'G4' } })).status, 403);
+
+    await request('PATCH', `/groups/${groups[0]._id}`, { token: DRIVER_A, body: { isActive: false } });
+    await createGroup(DRIVER_A, 'G4');
+
+    // El mismo comportamiento al bajar el límite general
+    const driverC = tokenFor('driver-c', 'DRIVER_ROLE');
+    await createGroup(driverC, 'C1');
+    await createGroup(driverC, 'C2');
+    await setDefaultLimit(0);
+    assert.equal(await activeGroupsOf('driver-c'), 2);
+    assert.equal((await request('POST', '/groups', { token: driverC, body: { name: 'C3' } })).status, 403);
+});
+
+test('cada grupo recibe un código único, también garantizado por la base de datos', async () => {
+    await setLimit('driver-a', 20);
+    await setLimit('driver-b', 20);
+
+    const created = await Promise.all([
+        ...Array.from({ length: 10 }, (_, i) => request('POST', '/groups', { token: DRIVER_A, body: { name: `A${i}` } })),
+        ...Array.from({ length: 10 }, (_, i) => request('POST', '/groups', { token: DRIVER_B, body: { name: `B${i}` } }))
+    ]);
+    assert.ok(created.every((r) => r.status === 201));
+
+    const codes = created.map((r) => r.body.data.code);
+    assert.equal(new Set(codes).size, codes.length);
+
+    await assert.rejects(
+        Group.create({ name: 'Duplicado', code: codes[0], driverId: 'driver-b' }),
+        { code: 11000 }
+    );
+});
+
+test('el conductor ve los pasajeros separados por cada uno de sus grupos', async () => {
+    const morning = await createGroup(DRIVER_A, 'Mañana');
+    const afternoon = await createGroup(DRIVER_A, 'Tarde');
+    const empty = await createGroup(DRIVER_A, 'Vacío');
+    const foreign = await createGroup(DRIVER_B, 'Ajeno');
+
+    const ana = await linkPassenger('ana', 'Ana');
+    const beto = await linkPassenger('beto', 'Beto');
+    const carla = await linkPassenger('carla', 'Carla');
+    const dani = await linkPassenger('dani', 'Dani');
+    await request('POST', '/groups/join', { token: ana.token, body: { code: morning.code } });
+    await request('POST', '/groups/join', { token: beto.token, body: { code: morning.code } });
+    await request('POST', '/groups/join', { token: carla.token, body: { code: afternoon.code } });
+    await request('POST', '/groups/join', { token: dani.token, body: { code: foreign.code } });
+
+    const list = await request('GET', '/groups', { token: DRIVER_A });
+    const counts = Object.fromEntries(list.body.data.map((g) => [g.name, g.passengerCount]));
+    assert.deepEqual(counts, { 'Mañana': 2, 'Tarde': 1, 'Vacío': 0 });
+
+    const names = async (group) =>
+        (await request('GET', `/groups/${group._id}`, { token: DRIVER_A })).body.data.passengers.map((p) => p.name).sort();
+    assert.deepEqual(await names(morning), ['Ana', 'Beto']);
+    assert.deepEqual(await names(afternoon), ['Carla']);
+    assert.deepEqual(await names(empty), []);
+
+    // Los pasajeros del grupo ajeno no son accesibles
+    const other = await request('GET', `/groups/${foreign._id}`, { token: DRIVER_A });
+    assert.equal(other.status, 403);
+    assert.equal(other.body.data, undefined);
+});
+
+test('unirse con un código válido devuelve el nombre del grupo y no permite suplantar a otro pasajero', async () => {
+    const group = await createGroup(DRIVER_A, 'Ruta norte');
+    const ana = await linkPassenger('ana', 'Ana');
+    const beto = await linkPassenger('beto', 'Beto');
+
+    const res = await request('POST', '/groups/join', {
+        token: ana.token,
+        body: { code: group.code, userId: 'beto', passengerId: beto._id }
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.message, 'Te uniste al grupo Ruta norte');
+    assert.equal(res.body.data.group.name, 'Ruta norte');
+    assert.equal(res.body.data.passenger._id, ana._id);
+
+    assert.equal(String((await Passenger.findById(ana._id)).groupId), group._id);
+    assert.equal((await Passenger.findById(beto._id)).groupId, null);
+
+    // Su rol no cambia por unirse: sigue sin poder gestionar grupos
+    assert.equal((await request('GET', '/groups', { token: ana.token })).status, 403);
+    assert.equal((await request('POST', '/groups', { token: ana.token, body: { name: 'Mío' } })).status, 403);
+    assert.equal((await request('PATCH', `/groups/${group._id}`, { token: ana.token, body: { name: 'Mío' } })).status, 403);
+    assert.equal((await request('DELETE', `/groups/${group._id}`, { token: ana.token })).status, 403);
+});
+
+test('unirse varias veces a la vez al mismo grupo deja una sola membresía', async () => {
+    const group = await createGroup(DRIVER_A, 'Ruta');
+    const passenger = await linkPassenger('user-race');
+
+    const results = await Promise.all(
+        Array.from({ length: 5 }, () => request('POST', '/groups/join', { token: passenger.token, body: { code: group.code } }))
+    );
+
+    assert.deepEqual(results.map((r) => r.status).sort(), [200, 409, 409, 409, 409]);
+    assert.match(results.find((r) => r.status === 409).body.message, /Ya perteneces al grupo Ruta/);
+    assert.equal(await Passenger.countDocuments({ userId: 'user-race', isActive: true }), 1);
+});
+
+test('unirse a otro grupo cambia la membresía (un pasajero pertenece a un solo grupo)', async () => {
+    const first = await createGroup(DRIVER_A, 'Primero');
+    const second = await createGroup(DRIVER_B, 'Segundo');
+    const passenger = await linkPassenger('user-move');
+
+    await request('POST', '/groups/join', { token: passenger.token, body: { code: first.code } });
+    const move = await request('POST', '/groups/join', { token: passenger.token, body: { code: second.code } });
+    assert.equal(move.status, 200);
+
+    assert.equal(String((await Passenger.findById(passenger._id)).groupId), second._id);
+    const firstDetail = await request('GET', `/groups/${first._id}`, { token: DRIVER_A });
+    assert.deepEqual(firstDetail.body.data.passengers, []);
 });

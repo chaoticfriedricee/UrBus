@@ -69,7 +69,7 @@ const NAV_ITEMS = [
   {
     label: "Grupos",
     path: "/dashboard/groups",
-    roles: ["ADMIN_ROLE", "DRIVER_ROLE"],
+    roles: ["ADMIN_ROLE", "DRIVER_ROLE", "PASSENGER_ROLE", "USER_ROLE"],
     icon: (
       <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" strokeLinecap="round" />

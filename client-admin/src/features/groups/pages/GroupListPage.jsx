@@ -7,6 +7,8 @@ import { GroupModal } from '../components/GroupModal.jsx';
 import { DeleteGroupModal } from '../components/DeleteGroupModal.jsx';
 import { GroupDetailModal } from '../components/GroupDetailModal.jsx';
 import { DriverLimitCard } from '../components/DriverLimitCard.jsx';
+import { DefaultLimitCard } from '../components/DefaultLimitCard.jsx';
+import { PassengerGroupView } from '../components/PassengerGroupView.jsx';
 
 function SkeletonCard() {
     return (
@@ -54,10 +56,53 @@ function EmptyState({ message, actionLabel, onAction }) {
     );
 }
 
+function InfoBanner({ tone = 'info', children }) {
+    const palette = tone === 'warning'
+        ? { background: '#fffbeb', border: '#fde68a', color: '#92400e' }
+        : { background: '#f0f7ff', border: '#cfe3f7', color: '#1e4e79' };
+
+    return (
+        <div
+            role={tone === 'warning' ? 'alert' : undefined}
+            style={{
+                padding: '12px 16px', borderRadius: 14, marginBottom: 16,
+                background: palette.background, border: `1px solid ${palette.border}`,
+                color: palette.color, fontSize: 13, lineHeight: 1.45,
+            }}
+        >
+            {children}
+        </div>
+    );
+}
+
 export const GroupListPage = () => {
     const user    = useAuthStore((s) => s.user);
     const isAdmin  = user?.role === 'ADMIN_ROLE';
     const isDriver = user?.role === 'DRIVER_ROLE';
+
+    // PASSENGER_ROLE / USER_ROLE: ven su grupo y se unen a otro con un código
+    if (!isAdmin && !isDriver) return <PassengerGroupsPage />;
+
+    return <ManagerGroupsPage user={user} isAdmin={isAdmin} isDriver={isDriver} />;
+};
+
+function PassengerGroupsPage() {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', background: '#f4f6fb' }}>
+            <div style={{ padding: '0 0 20px 0' }}>
+                <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#111827', letterSpacing: '-0.3px' }}>
+                    Grupos
+                </h1>
+                <p style={{ margin: '3px 0 0', fontSize: 13, color: '#9ca3af' }}>
+                    Tu grupo y la opción para unirte con el código de tu conductor
+                </p>
+            </div>
+            <PassengerGroupView />
+        </div>
+    );
+}
+
+function ManagerGroupsPage({ user, isAdmin, isDriver }) {
 
     const groups        = useGroupStore((s) => s.groups);
     const loading        = useGroupStore((s) => s.loading);
@@ -85,7 +130,9 @@ export const GroupListPage = () => {
     );
 
     const activeCount = getActiveCount();
-    const atLimit = isDriver && activeCount >= myLimit;
+    const limitKnown = isDriver && myLimit !== null;
+    const atLimit = limitKnown && activeCount >= myLimit;
+    const overLimit = limitKnown && activeCount > myLimit;
 
     return (
         <div style={{
@@ -109,7 +156,9 @@ export const GroupListPage = () => {
                         {loading
                             ? 'Cargando...'
                             : isDriver
-                                ? `${activeCount} de ${myLimit} grupos usados`
+                                ? limitKnown
+                                    ? `${activeCount} de ${myLimit} grupo${myLimit === 1 ? '' : 's'} activo${myLimit === 1 ? '' : 's'}`
+                                    : `${activeCount} grupos activos`
                                 : `${groups.length} grupos registrados`}
                     </p>
                 </div>
@@ -137,7 +186,7 @@ export const GroupListPage = () => {
                         <button
                             onClick={() => setModal('create')}
                             disabled={atLimit}
-                            title={atLimit ? 'Alcanzaste el límite de grupos permitido' : undefined}
+                            title={atLimit ? `Alcanzaste el límite de ${myLimit} grupos activos` : undefined}
                             style={{
                                 display: 'flex', alignItems: 'center', gap: 6,
                                 padding: '8px 16px', borderRadius: 10, border: 'none',
@@ -154,6 +203,21 @@ export const GroupListPage = () => {
                     )}
                 </div>
             </div>
+
+            {isDriver && !loading && atLimit && (
+                <InfoBanner tone="warning">
+                    {overLimit
+                        ? `Tienes ${activeCount} grupos activos y el límite actual es ${myLimit}. Tus grupos se conservan, pero no podrás crear ni reactivar grupos hasta tener menos de ${myLimit} activos.`
+                        : `Alcanzaste el límite de ${myLimit} grupo${myLimit === 1 ? '' : 's'} activo${myLimit === 1 ? '' : 's'}. Para crear otro, desactiva o elimina uno, o solicita a un administrador un límite mayor.`}
+                </InfoBanner>
+            )}
+
+            {isDriver && groups.length > 0 && (
+                <InfoBanner>
+                    Cada grupo tiene su propio <strong>código de unión</strong>. Compártelo con tus pasajeros:
+                    lo ingresan en «Unirme a un grupo» y quedan asignados a ese grupo. Toca un grupo para ver sus pasajeros.
+                </InfoBanner>
+            )}
 
             {isAdmin && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -186,16 +250,20 @@ export const GroupListPage = () => {
                 border: '1px solid #f0f0f0',
             }}>
                 {tab === 'limits' && isAdmin ? (
-                    drivers.length === 0 ? (
-                        <EmptyState message="No hay conductores registrados" />
-                    ) : (
-                        drivers.map((d, i) => (
-                            <div key={d.id}>
-                                {i > 0 && <div style={{ height: 1, background: '#f3f4f6', margin: '0 18px' }} />}
-                                <DriverLimitCard driver={d} />
-                            </div>
-                        ))
-                    )
+                    <>
+                        <DefaultLimitCard />
+                        <div style={{ height: 1, background: '#e5e7eb' }} />
+                        {drivers.length === 0 ? (
+                            <EmptyState message="No hay conductores registrados" />
+                        ) : (
+                            drivers.map((d, i) => (
+                                <div key={d.id}>
+                                    {i > 0 && <div style={{ height: 1, background: '#f3f4f6', margin: '0 18px' }} />}
+                                    <DriverLimitCard driver={d} />
+                                </div>
+                            ))
+                        )}
+                    </>
                 ) : loading ? (
                     <>
                         {[1, 2, 3].map((k, i) => (
@@ -242,4 +310,4 @@ export const GroupListPage = () => {
             )}
         </div>
     );
-};
+}
