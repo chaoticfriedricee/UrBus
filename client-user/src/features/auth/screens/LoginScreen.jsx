@@ -66,6 +66,10 @@ export default function LoginScreen({ navigation }) {
           )}
         />
 
+        <Text style={styles.forgotLink} onPress={() => navigation.navigate('EmailRequest', { mode: 'forgot' })}>
+          ¿Olvidaste tu contraseña?
+        </Text>
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Button title="Login" onPress={handleSubmit(onSubmit)} loading={loading} style={styles.loginBtn} />
@@ -74,6 +78,12 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.footerText}>¿No tienes cuenta? </Text>
           <Text style={styles.footerLink} onPress={() => navigation.navigate('Register')}>
             Regístrate
+          </Text>
+        </View>
+        <View style={styles.footerRowTight}>
+          <Text style={styles.footerText}>¿No verificaste tu correo? </Text>
+          <Text style={styles.footerLink} onPress={() => navigation.navigate('EmailRequest', { mode: 'resend' })}>
+            Reenviar
           </Text>
         </View>
       </ScrollView>
@@ -103,6 +113,8 @@ const styles = StyleSheet.create({
   error: { color: COLORS.error, fontSize: FONT_SIZE.sm, textAlign: 'center', marginBottom: SPACING.sm },
   loginBtn: { marginTop: SPACING.sm },
   footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.lg },
+  footerRowTight: { flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.sm },
+  forgotLink: { color: COLORS.primary, fontWeight: '600', fontSize: FONT_SIZE.sm, textAlign: 'right', marginBottom: SPACING.sm },
   footerText: { color: COLORS.textLight, fontSize: FONT_SIZE.sm },
   footerLink: { color: COLORS.primary, fontWeight: '700', fontSize: FONT_SIZE.sm },
 });
