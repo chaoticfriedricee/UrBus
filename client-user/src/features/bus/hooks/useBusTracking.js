@@ -1,8 +1,12 @@
 // src/features/bus/hooks/useBusTracking.js
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Linking } from 'react-native';
 import * as Location from 'expo-location';
 import { refreshAccessToken } from '../../../shared/api/authClient';
+import {
+  setBackgroundFixHandler, requestBackgroundPermission, hasBackgroundPermission,
+  startBackgroundLocation, stopBackgroundLocation, isBackgroundLocationRunning,
+} from '../services/backgroundLocation';
 import {
   connectLocationSocket, onUpdateBus, onBusArrived, onLocationStatus, onConnectionChange,
   reconnectLocationSocket, isLocationSocketConnected, isLocationSocketActive,
@@ -31,9 +35,13 @@ const GPS_UNAVAILABLE = 'No se pudo obtener tu ubicación (¿GPS desactivado o s
  * de ubicación, se avisa "startSharing" y se transmite el GPS; al finalizarla (o al
  * cerrar la pantalla) se deja de compartir.
  *
- * Límite: con permiso "mientras se usa la app", el sistema deja de entregar el GPS con la
- * app en segundo plano o la pantalla bloqueada. Al volver a primer plano se reconecta, se
- * comprueba el permiso y se pide una posición fresca sin que el conductor reinicie la ruta.
+ * Segundo plano: con el permiso "Permitir siempre" la ruta usa un servicio con notificación
+ * fija (services/backgroundLocation) y sigue enviando aunque el conductor cambie de app o
+ * bloquee la pantalla. backgroundMode indica cómo se está transmitiendo:
+ * - 'background': sigue en segundo plano.
+ * - 'foreground': sin ese permiso (o no disponible, p. ej. en Expo Go) solo se envía con la
+ *   app abierta; al volver a primer plano se reconecta y se pide una posición fresca.
+ * Nunca corren a la vez el servicio y el watcher en primer plano.
  * - pausedRoute: el servidor conserva en pausa una ruta del conductor que esta app ya no
  *   transmite (se cerró o se reinició); puede reanudarla con startRoute o terminarla con endRoute.
  */
@@ -48,6 +56,7 @@ export function useBusTracking() {
   const [gpsError, setGpsError] = useState(null);
   const [routeActive, setRouteActive] = useState(false);
   const [pausedRoute, setPausedRoute] = useState(false);
+  const [backgroundMode, setBackgroundMode] = useState(null);
   const mountedRef = useRef(true);
   const watchRef = useRef(null);
   // Cada (re)inicio del watcher incrementa la generación: uno que termine de crearse tarde se descarta
@@ -57,11 +66,27 @@ export function useBusTracking() {
   const lastSentRef = useRef(null);
   const retriedAuthRef = useRef(false);
   const retryRef = useRef({ attempt: 0, timer: null });
+  // true mientras transmite el servicio en segundo plano (en vez del watcher)
+  const backgroundRef = useRef(false);
+  // Serializa los cambios de modo (iniciar ruta, volver a primer plano, terminar)
+  const transmitQueueRef = useRef(Promise.resolve());
 
   const stopWatch = useCallback(() => {
     watchGenRef.current += 1;
     watchRef.current?.remove?.();
     watchRef.current = null;
+  }, []);
+
+  // Mismo envío para el watcher en primer plano y para la tarea en segundo plano
+  const handleFix = useCallback((position) => {
+    if (!routeActiveRef.current) return;
+    if (mountedRef.current) setGpsError(null);
+    const fix = { lat: position.coords.latitude, lng: position.coords.longitude, timestamp: position.timestamp };
+    if (!shouldSendFix(fix, lastSentRef.current, Date.now())) return;
+    // Sin conexión no se acumulan posiciones viejas
+    if (!isLocationSocketConnected()) return;
+    emitBusLocation(fix);
+    lastSentRef.current = fix;
   }, []);
 
   // Nunca deja dos watchers: elimina el anterior y descarta este si la ruta terminó mientras se creaba
@@ -72,16 +97,7 @@ export function useBusTracking() {
     try {
       subscription = await Location.watchPositionAsync(
         WATCH_OPTIONS,
-        (position) => {
-          if (!routeActiveRef.current) return;
-          setGpsError(null);
-          const fix = { lat: position.coords.latitude, lng: position.coords.longitude, timestamp: position.timestamp };
-          if (!shouldSendFix(fix, lastSentRef.current, Date.now())) return;
-          // Sin conexión no se acumulan posiciones viejas
-          if (!isLocationSocketConnected()) return;
-          emitBusLocation(fix);
-          lastSentRef.current = fix;
-        },
+        handleFix,
         () => { if (routeActiveRef.current) setGpsError(GPS_UNAVAILABLE); }
       );
     } catch {
@@ -93,10 +109,51 @@ export function useBusTracking() {
       return;
     }
     watchRef.current = subscription;
+  }, [stopWatch, handleFix]);
+
+  /**
+   * Elige cómo transmitir: el servicio en segundo plano si hay permiso "Permitir siempre"
+   * (y el entorno lo admite) o, si no, el watcher en primer plano. Se vuelve a evaluar al
+   * regresar a la app, por si el conductor cambió el permiso en Ajustes.
+   */
+  const startTransmitting = useCallback(() => {
+    const run = async () => {
+      if (!routeActiveRef.current) return;
+      if (await hasBackgroundPermission()) {
+        const running = backgroundRef.current && (await isBackgroundLocationRunning());
+        if (!routeActiveRef.current) return;
+        if (running || (await startBackgroundLocation())) {
+          // La ruta pudo terminar mientras arrancaba el servicio
+          if (!routeActiveRef.current) {
+            await stopBackgroundLocation();
+            return;
+          }
+          stopWatch();
+          backgroundRef.current = true;
+          if (mountedRef.current) setBackgroundMode('background');
+          return;
+        }
+      }
+      if (backgroundRef.current) await stopBackgroundLocation();
+      backgroundRef.current = false;
+      if (!routeActiveRef.current) return;
+      if (mountedRef.current) setBackgroundMode('foreground');
+      await startWatch();
+    };
+    transmitQueueRef.current = transmitQueueRef.current.then(run, run);
+    return transmitQueueRef.current;
+  }, [startWatch, stopWatch]);
+
+  const stopTransmitting = useCallback(() => {
+    stopWatch();
+    backgroundRef.current = false;
+    const run = () => stopBackgroundLocation();
+    transmitQueueRef.current = transmitQueueRef.current.then(run, run);
+    return transmitQueueRef.current;
   }, [stopWatch]);
 
   const finishRoute = useCallback((message = null) => {
-    stopWatch();
+    stopTransmitting();
     routeActiveRef.current = false;
     lastSentRef.current = null;
     // Siempre se avisa: también termina una ruta que el servidor tenía en pausa
@@ -106,16 +163,19 @@ export function useBusTracking() {
     setCoords(null);
     setArrived(false);
     setGpsError(null);
+    setBackgroundMode(null);
     setError(message);
-  }, [stopWatch]);
+  }, [stopTransmitting]);
 
   useEffect(() => {
     mountedRef.current = true;
     const retry = retryRef.current;
 
     const scheduleRetry = () => {
-      // En segundo plano no se gastan reintentos: se reconecta al volver
-      if (retry.timer || AppState.currentState !== 'active') return;
+      // En segundo plano no se gastan reintentos (se reconecta al volver), salvo que la
+      // ruta siga transmitiendo desde el servicio en segundo plano
+      const transmittingInBackground = backgroundRef.current && routeActiveRef.current;
+      if (retry.timer || (AppState.currentState !== 'active' && !transmittingInBackground)) return;
       const delay = RETRY_DELAYS_MS[Math.min(retry.attempt, RETRY_DELAYS_MS.length - 1)];
       retry.attempt += 1;
       retry.timer = setTimeout(() => {
@@ -138,9 +198,13 @@ export function useBusTracking() {
         return;
       }
       if (!(await Location.hasServicesEnabledAsync())) setGpsError(GPS_UNAVAILABLE);
-      startWatch();
+      // Retoma el servicio si el sistema lo detuvo, o cambia de modo si cambió el permiso
+      startTransmitting();
     };
     const appStateSubscription = AppState.addEventListener('change', onAppStateChange);
+    setBackgroundFixHandler(handleFix);
+    // Al montar nunca hay ruta activa: un servicio que quedó de una sesión anterior se apaga
+    stopTransmitting();
 
     try {
       connectLocationSocket();
@@ -213,13 +277,14 @@ export function useBusTracking() {
       appStateSubscription.remove();
       clearTimeout(retry.timer);
       retry.timer = null;
-      stopWatch();
+      setBackgroundFixHandler(null);
+      stopTransmitting();
       // Al cerrar la pantalla se deja de compartir (antes de desconectar, para que llegue)
       if (routeActiveRef.current) emitStopSharing();
       routeActiveRef.current = false;
       disconnectLocationSocket();
     };
-  }, [startWatch, stopWatch, finishRoute]);
+  }, [handleFix, startTransmitting, stopTransmitting, finishRoute]);
 
   const resetArrived = useCallback(() => setArrived(false), []);
 
@@ -238,6 +303,9 @@ export function useBusTracking() {
         setError('Activa la ubicación (GPS) del teléfono para iniciar la ruta');
         return;
       }
+      // "Permitir siempre": en Android 11+ el sistema abre Ajustes. Si no se concede, la
+      // ruta igual empieza, pero solo transmite con la app abierta (backgroundMode 'foreground')
+      await requestBackgroundPermission();
       if (!mountedRef.current) return;
       setError(null);
       setGpsError(null);
@@ -248,16 +316,19 @@ export function useBusTracking() {
       lastSentRef.current = null;
       // Sin conexión lo envía el manejador de "connect" al conectar
       if (isLocationSocketConnected()) emitStartSharing();
-      await startWatch();
+      await startTransmitting();
     } finally {
       startingRef.current = false;
     }
-  }, [startWatch]);
+  }, [startTransmitting]);
 
   const endRoute = useCallback(() => finishRoute(), [finishRoute]);
 
+  // Para conceder "Permitir siempre" desde la pantalla del mapa
+  const openLocationSettings = useCallback(() => Linking.openSettings(), []);
+
   return {
     coords, arrived, connected, connecting, sharing, noGroup, error, gpsError, routeActive, pausedRoute,
-    resetArrived, startRoute, endRoute,
+    backgroundMode, resetArrived, startRoute, endRoute, openLocationSettings,
   };
 }

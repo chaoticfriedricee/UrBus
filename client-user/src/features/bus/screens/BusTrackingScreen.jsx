@@ -2,7 +2,8 @@
 // Pantalla "Mapa a Tiempo Real" — replica el mockup: encabezado azul con título
 // e iconos, mapa de fondo claro y marcador del bus. Para DRIVER_ROLE agrega los
 // controles "Iniciar Ruta" / "Finalizar Ruta", que comparten su ubicación con los
-// pasajeros de sus grupos. Los pasajeros solo ven la ubicación de su conductor y
+// pasajeros de sus grupos (también en segundo plano con el permiso «Todo el tiempo»).
+// Los pasajeros solo ven la ubicación de su conductor y
 // únicamente mientras él la comparte. Una posición vieja se muestra con su antigüedad,
 // nunca como ubicación en vivo.
 import React, { useEffect, useState } from 'react';
@@ -24,7 +25,8 @@ export default function BusTrackingScreen() {
   const isDriver = user?.role === ROLES.DRIVER;
 
   const {
-    coords, arrived, connected, sharing, noGroup, error, gpsError, routeActive, pausedRoute, startRoute, endRoute,
+    coords, arrived, connected, sharing, noGroup, error, gpsError, routeActive, pausedRoute, backgroundMode,
+    startRoute, endRoute, openLocationSettings,
   } = useBusTracking();
 
   // Refresca el "hace X" mientras hay una posición en pantalla (solo re-renderiza)
@@ -107,10 +109,22 @@ export default function BusTrackingScreen() {
         </View>
       ) : null}
 
-      {isDriver && routeActive ? (
+      {isDriver && routeActive && backgroundMode === 'background' ? (
         <Text style={styles.hintText}>
-          Mantén UrBus abierta en pantalla: en segundo plano o con la pantalla bloqueada el teléfono pausa el envío y se reanuda al volver.
+          Puedes cambiar de app o bloquear la pantalla: la ubicación se sigue enviando mientras veas la notificación «UrBus · Ruta activa».
         </Text>
+      ) : null}
+
+      {isDriver && routeActive && backgroundMode === 'foreground' ? (
+        <View style={styles.foregroundNotice}>
+          <Text style={styles.foregroundNoticeText}>
+            Solo se envía con UrBus abierta. Para que siga al cambiar de app o bloquear la pantalla, permite la ubicación «Todo el tiempo».
+          </Text>
+          <TouchableOpacity style={styles.settingsBtn} onPress={openLocationSettings}>
+            <MaterialIcons name="settings" size={14} color={COLORS.primary} />
+            <Text style={styles.settingsBtnText}>Abrir ajustes</Text>
+          </TouchableOpacity>
+        </View>
       ) : null}
 
       {freshness ? (
@@ -200,6 +214,17 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.xs, color: COLORS.textLight, textAlign: 'center',
     paddingHorizontal: SPACING.lg, marginBottom: SPACING.sm,
   },
+  foregroundNotice: {
+    marginHorizontal: SPACING.md, marginBottom: SPACING.sm, padding: SPACING.sm,
+    borderRadius: RADIUS.md, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a',
+  },
+  foregroundNoticeText: { fontSize: FONT_SIZE.xs, color: '#92400e', textAlign: 'center' },
+  settingsBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    alignSelf: 'center', marginTop: 6, paddingHorizontal: SPACING.md, paddingVertical: 6,
+    borderRadius: RADIUS.pill, backgroundColor: COLORS.surface,
+  },
+  settingsBtnText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.primary },
   freshnessBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center',
     marginBottom: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: 6,
