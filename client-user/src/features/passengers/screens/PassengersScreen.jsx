@@ -5,7 +5,7 @@
 // - USER_ROLE / PASSENGER_ROLE: tarjeta con su propio estado de asistencia, su
 //   grupo (o el formulario para unirse con un código) y sus compañeros de grupo.
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, ScrollView, RefreshControl, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, FlatList, ScrollView, RefreshControl, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import useAuthStore from '../../../shared/store/authStore';
 import { usePassengers } from '../hooks/usePassengers';
@@ -13,6 +13,9 @@ import { useMyStatus } from '../hooks/useMyStatus';
 import { getGroups } from '../../../shared/api/groupApi';
 import PassengerListItem from '../components/PassengerListItem';
 import PassengerFormModal from '../components/PassengerFormModal';
+import AbsenceReasonModal from '../components/AbsenceReasonModal';
+import AccountInfoModal from '../../../shared/components/AccountInfoModal';
+import PassengerNameModal from '../components/PassengerNameModal';
 import ConfirmModal from '../../../shared/components/common/ConfirmModal';
 import Button from '../../../shared/components/common/Button';
 import Input from '../../../shared/components/common/Input';
@@ -58,8 +61,18 @@ function ManagerPassengersView() {
   const canCreate = MANAGER_ROLES.includes(user?.role); // ADMIN o DRIVER
   const canToggleStatus = user?.role === ROLES.ADMIN || user?.role === ROLES.DRIVER;
 
-  const { passengers, loading, error, presentCount, fetchPassengers, toggleStatus, addPassenger, removePassenger } =
-    usePassengers();
+  const {
+    passengers, loading, error, presentCount, fetchPassengers, toggleStatus, addPassenger, removePassenger,
+    editPassenger, saveAbsenceReason, removeAbsenceReason,
+  } = usePassengers();
+  const [absenceTarget, setAbsenceTarget] = useState(null);
+  const [infoTarget, setInfoTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+
+  const handleClearAbsenceReason = async (passenger) => {
+    const result = await removeAbsenceReason(passenger._id);
+    if (!result.success) Alert.alert('No se pudo quitar el motivo', result.message);
+  };
 
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -158,8 +171,16 @@ function ManagerPassengersView() {
               <PassengerListItem
                 passenger={item}
                 canToggle={canToggleStatus}
+                canManage={canToggleStatus}
+                // passenger-service permite al conductor corregir el nombre (p. ej. de un perfil
+                // creado al unirse con el código); eliminar sigue siendo solo del admin
+                canEdit={canToggleStatus}
                 canDelete={isAdmin}
                 onToggle={(p) => toggleStatus(p._id, p.status)}
+                onAbsenceReason={setAbsenceTarget}
+                onClearAbsenceReason={handleClearAbsenceReason}
+                onInfo={setInfoTarget}
+                onEdit={setEditTarget}
                 onDelete={(p) => setDeleteTarget(p)}
               />
             )}
@@ -173,6 +194,10 @@ function ManagerPassengersView() {
         onClose={() => setShowCreate(false)}
         onSubmit={handleFormSubmit}
       />
+
+      <AbsenceReasonModal passenger={absenceTarget} onClose={() => setAbsenceTarget(null)} onSubmit={saveAbsenceReason} />
+      <AccountInfoModal userId={infoTarget?.userId} onClose={() => setInfoTarget(null)} />
+      <PassengerNameModal passenger={editTarget} onClose={() => setEditTarget(null)} onSubmit={editPassenger} />
 
       <ConfirmModal
         visible={Boolean(deleteTarget)}

@@ -3,7 +3,9 @@
 // (features/passangers/store/passengerStore.js). Disponible para DRIVER_ROLE y
 // ADMIN_ROLE; el toggle de estado solo lo pueden usar ellos (no el pasajero).
 import { useState, useCallback, useRef } from 'react';
-import { getPassengers, createPassenger, updatePassengerStatus, deletePassenger } from '../../../shared/api/passengerApi';
+import {
+  getPassengers, createPassenger, updatePassenger, updatePassengerStatus, setAbsenceReason, clearAbsenceReason, deletePassenger,
+} from '../../../shared/api/passengerApi';
 
 export function usePassengers() {
   const [passengers, setPassengers] = useState([]);
@@ -73,7 +75,38 @@ export function usePassengers() {
     }
   }, [passengers]);
 
+  // El servidor devuelve el pasajero actualizado; se reemplaza en la lista
+  const replaceWith = useCallback(async (request, fallback) => {
+    try {
+      const response = await request();
+      const updated = response.data.data ?? response.data;
+      setPassengers((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.response?.data?.message ?? fallback };
+    }
+  }, []);
+
+  const editPassenger = useCallback(
+    (id, name) => replaceWith(() => updatePassenger(id, { name }), 'No se pudo editar el pasajero'),
+    [replaceWith]
+  );
+
+  // Registrar un motivo marca al pasajero como ausente (lo hace passenger-service)
+  const saveAbsenceReason = useCallback(
+    (id, reason, note) => replaceWith(() => setAbsenceReason(id, { reason, note }), 'No se pudo registrar el motivo de ausencia'),
+    [replaceWith]
+  );
+
+  const removeAbsenceReason = useCallback(
+    (id) => replaceWith(() => clearAbsenceReason(id), 'No se pudo quitar el motivo de ausencia'),
+    [replaceWith]
+  );
+
   const presentCount = passengers.filter((p) => p.status === 'PRESENT').length;
 
-  return { passengers, loading, error, presentCount, fetchPassengers, toggleStatus, addPassenger, removePassenger };
+  return {
+    passengers, loading, error, presentCount, fetchPassengers, toggleStatus, addPassenger, removePassenger,
+    editPassenger, saveAbsenceReason, removeAbsenceReason,
+  };
 }
