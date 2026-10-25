@@ -1,7 +1,7 @@
 // src/navigation/MainTabs.jsx
 // Navegación inferior — replica el mockup: Pasajeros, Mapa, Anuncios y Perfil, con el
 // ícono activo resaltado en amarillo. Conductor y admin tienen además "Grupos".
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -17,6 +17,9 @@ import GroupDetailScreen from '../features/groups/screens/GroupDetailScreen';
 import UsersScreen from '../features/users/screens/UsersScreen';
 
 import useAuthStore from '../shared/store/authStore';
+import { getPosts } from '../shared/api/postApi';
+import useUrgentPostsStore from '../features/posts/store/urgentPostsStore';
+import { hasUnreadUrgent } from '../features/posts/utils/urgent';
 import { COLORS, MANAGER_ROLES } from '../shared/constants/theme';
 
 const Tab = createBottomTabNavigator();
@@ -93,6 +96,19 @@ const ICONS = {
 export default function MainTabs() {
   const role = useAuthStore((state) => state.user?.role);
   const isManager = MANAGER_ROLES.includes(role);
+  const setUrgentPosts = useUrgentPostsStore((state) => state.setPosts);
+  const unreadUrgent = useUrgentPostsStore((state) => hasUnreadUrgent(state.latestAt, state.lastSeenAt));
+
+  // Al entrar se consultan los anuncios una vez para saber si hay urgentes sin revisar
+  // (la pantalla de anuncios lo actualiza cada vez que los carga)
+  useEffect(() => {
+    getPosts()
+      .then(({ data }) => {
+        const list = data.data ?? data;
+        if (Array.isArray(list)) setUrgentPosts(list);
+      })
+      .catch(() => {});
+  }, [setUrgentPosts]);
 
   return (
     <Tab.Navigator
@@ -126,7 +142,14 @@ export default function MainTabs() {
       <Tab.Screen name="Pasajeros" component={PassengersStack} />
       <Tab.Screen name="Mapa" component={BusStack} />
       {isManager ? <Tab.Screen name="Grupos" component={GroupsStack} /> : null}
-      <Tab.Screen name="Anuncios" component={PostsStack} />
+      <Tab.Screen
+        name="Anuncios"
+        component={PostsStack}
+        options={{
+          tabBarBadge: unreadUrgent ? '' : undefined,
+          tabBarBadgeStyle: { minWidth: 10, maxHeight: 10, borderRadius: 5, backgroundColor: COLORS.error, top: 4 },
+        }}
+      />
       <Tab.Screen name="Perfil" component={ProfileStack} />
     </Tab.Navigator>
   );

@@ -17,6 +17,7 @@ export default function PostFormModal({ visible, post, groups = [], loading, onC
   const [preview, setPreview] = useState(post?.image ?? null);
   // '' = aviso general; si no, id del grupo destinatario
   const [groupId, setGroupId] = useState(post?.groupId ?? '');
+  const [isUrgent, setIsUrgent] = useState(post?.isUrgent ?? false);
 
   useEffect(() => {
     if (visible) {
@@ -25,6 +26,7 @@ export default function PostFormModal({ visible, post, groups = [], loading, onC
       setImage(null);
       setPreview(post?.image ?? null);
       setGroupId(post?.groupId ?? '');
+      setIsUrgent(post?.isUrgent ?? false);
     }
   }, [visible, post]);
 
@@ -47,6 +49,7 @@ export default function PostFormModal({ visible, post, groups = [], loading, onC
     const formData = new FormData();
     formData.append('title', title.trim());
     formData.append('content', content.trim());
+    formData.append('isUrgent', String(isUrgent));
     // Al editar solo se envía si cambió (post-service vuelve a validar que el grupo sea tuyo)
     if (groupId !== (post?.groupId ?? '')) formData.append('groupId', groupId);
     if (image) formData.append('image', image);
@@ -93,6 +96,23 @@ export default function PostFormModal({ visible, post, groups = [], loading, onC
             </>
           ) : null}
 
+          <TouchableOpacity
+            style={[styles.urgentToggle, isUrgent && styles.urgentToggleOn]}
+            onPress={() => setIsUrgent((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: isUrgent }}
+          >
+            <MaterialIcons
+              name={isUrgent ? 'check-box' : 'check-box-outline-blank'}
+              size={20}
+              color={isUrgent ? COLORS.error : COLORS.textMuted}
+            />
+            <View style={styles.urgentTextWrap}>
+              <Text style={[styles.urgentTitle, isUrgent && styles.urgentTitleOn]}>Marcar como «Urgente»</Text>
+              <Text style={styles.urgentHint}>Se destaca en rojo y avisa con un punto en «Anuncios»</Text>
+            </View>
+          </TouchableOpacity>
+
           <Text style={styles.label}>Imagen (opcional)</Text>
           {preview ? (
             <View style={styles.previewWrap}>
@@ -136,4 +156,13 @@ const styles = StyleSheet.create({
   chipText: { fontSize: FONT_SIZE.xs, fontWeight: '600', color: COLORS.text },
   chipTextActive: { color: '#fff' },
   flexBtn: { flex: 1 },
+  urgentToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, padding: 10, marginBottom: SPACING.md,
+    borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: COLORS.border,
+  },
+  urgentToggleOn: { borderColor: COLORS.error, backgroundColor: '#fef2f2' },
+  urgentTextWrap: { flex: 1 },
+  urgentTitle: { fontSize: FONT_SIZE.sm, fontWeight: '700', color: COLORS.text },
+  urgentTitleOn: { color: '#b91c1c' },
+  urgentHint: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted, marginTop: 1 },
 });
