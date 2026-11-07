@@ -1,160 +1,271 @@
-// src/features/bus/components/OSMMapView.jsx
-// Reemplazo de react-native-maps (Google) usando Leaflet + tiles de
-// OpenStreetMap dentro de un WebView. No requiere API key, tarjeta,
-// ni build nativo — funciona directo en Expo Go.
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+const MAP_STYLE_URL = process.env.EXPO_PUBLIC_MAP_STYLE_URL
+  || 'https://tiles.openfreemap.org/styles/liberty';
 function buildHtml(initialLat, initialLng, initialZoom) {
+  const config = JSON.stringify({ styleUrl: MAP_STYLE_URL });
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css" />
   <style>
     html, body, #map { height: 100%; margin: 0; padding: 0; }
+    .marker { display:flex; width:30px; height:30px; align-items:center; justify-content:center;
+      border:3px solid #fff; border-radius:50%; color:#fff; font:700 13px system-ui,sans-serif;
+      box-shadow:0 1px 5px rgba(0,0,0,.45); }
+    .vehicle { width:38px; height:38px; border-width:2px; background:#005691; font-size:22px; }
+    .vehicle::after { content:'🚌'; }
+    .origin { background:#16a34a; }
+    .origin::after { content:'A'; }
+    .destination { background:#dc2626; }
+    .destination::after { content:'B'; }
+    .maplibregl-ctrl-attrib { font-size:9px; }
   </style>
 </head>
 <body>
   <div id="map"></div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js"></script>
   <script>
-    const map = L.map('map', { zoomControl: false, attributionControl: true })
-      .setView([${initialLat}, ${initialLng}], ${initialZoom});
+    const CONFIG = ${config};
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: CONFIG.styleUrl,
+      center: [${initialLng}, ${initialLat}],
+      zoom: ${initialZoom},
+      pitch: 0,
+      bearing: 0,
+      attributionControl: true
+    });
+    const state = { vehicle: null, origin: null, destination: null, routeGeometry: null, canEditDestination: false };
+    const markers = {};
+    const pendingMessages = [];
+    let mapReady = false;
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+    function notifyNative(message) {
+      window.ReactNativeWebView.postMessage(JSON.stringify(message));
+    }
 
-    let marker = null;
-    let destinationMarker = null;
+    function hideUnneededLayers() {
+      for (const layer of map.getStyle().layers) {
+        if (/poi|amenity|shop|tourism|hotel|restaurant|food|bank|school|hospital|clinic|museum|attraction|landmark|historic|airport|aerodrome|building-3d|hillshade|contour/i.test(
+          layer.id + ' ' + (layer['source-layer'] || '')
+        )) {
+          map.setLayoutProperty(layer.id, 'visibility', 'none');
+        }
+      }
+      map.setTerrain(null);
+    }
 
-    function setMarker(lat, lng, title, description, opacity) {
-      if (marker) {
-        marker.setLatLng([lat, lng]);
+    function updateMarker(kind, point, title, opacity, draggable = false) {
+      if (!point) {
+        markers[kind]?.remove();
+        delete markers[kind];
+        return;
+      }
+      if (!markers[kind]) {
+        const element = document.createElement('div');
+        element.className = 'marker ' + kind;
+        element.setAttribute('aria-label', title || kind);
+        const marker = new maplibregl.Marker({ element, draggable }).setLngLat([point.lng, point.lat]).addTo(map);
+        if (kind === 'destination') {
+          marker.on('dragend', () => {
+            const position = marker.getLngLat();
+            state.destination = { lat: position.lat, lng: position.lng };
+            notifyNative({ type: 'DESTINATION_CHANGED', point: state.destination });
+          });
+        }
+        markers[kind] = marker;
       } else {
-        marker = L.marker([lat, lng]).addTo(map);
+        markers[kind].setLngLat([point.lng, point.lat]);
+        if (kind === 'destination') markers[kind].setDraggable(draggable);
       }
-      // Atenuado cuando es solo la última ubicación conocida
-      marker.setOpacity(typeof opacity === 'number' ? opacity : 1);
-      if (title || description) {
-        marker.bindPopup('<b>' + (title || '') + '</b><br/>' + (description || ''));
-      }
-      map.setView([lat, lng], map.getZoom());
+      markers[kind].getElement().style.opacity = String(typeof opacity === 'number' ? opacity : 1);
     }
 
-    function removeMarker() {
-      if (marker) {
-        map.removeLayer(marker);
-        marker = null;
+    function updateRoute(geometry) {
+      state.routeGeometry = geometry;
+      const source = map.getSource('urbus-route');
+      if (!geometry) {
+        source?.setData({ type: 'FeatureCollection', features: [] });
+        return;
+      }
+      source?.setData({ type: 'Feature', properties: {}, geometry });
+      if (!Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2) return;
+      const bounds = geometry.coordinates.reduce(
+        (resultBounds, coordinate) => resultBounds.extend(coordinate),
+        new maplibregl.LngLatBounds(geometry.coordinates[0], geometry.coordinates[0])
+      );
+      map.fitBounds(bounds, { padding: 48, maxZoom: 16, duration: 400 });
+    }
+
+    function setVehicle(point, title, description, opacity) {
+      state.vehicle = point;
+      updateMarker('vehicle', point, title || description, opacity);
+    }
+
+    function handleMessage(event) {
+      try {
+        const data = JSON.parse(event.data);
+        if (!mapReady) {
+          pendingMessages.push(data);
+          return;
+        }
+        applyMessage(data);
+      } catch (error) {
+        console.error('No se pudo procesar el mensaje del mapa:', error);
       }
     }
 
-    function setDestination(lat, lng, title, description) {
-      if (destinationMarker) {
-        destinationMarker.setLatLng([lat, lng]);
-      } else {
-        destinationMarker = L.marker([lat, lng]).addTo(map);
-      }
-      if (title || description) {
-        destinationMarker.bindPopup('<b>' + (title || '') + '</b><br/>' + (description || ''));
-      }
-    }
-
-    function removeDestination() {
-      if (destinationMarker) {
-        map.removeLayer(destinationMarker);
-        destinationMarker = null;
+    function applyMessage(data) {
+      if (data.type === 'SET_VEHICLE') {
+        setVehicle(data.point, data.title, data.description, data.opacity);
+      } else if (data.type === 'SET_ORIGIN') {
+        state.origin = data.point;
+        updateMarker('origin', state.origin, data.title || 'Origen de la ruta');
+      } else if (data.type === 'SET_DESTINATION') {
+        state.destination = data.point;
+        state.canEditDestination = Boolean(data.canEdit);
+        updateMarker('destination', state.destination, data.title || 'Destino de la ruta', 1, state.canEditDestination);
+      } else if (data.type === 'SET_ROUTE') {
+        updateRoute(data.geometry);
       }
     }
 
     document.addEventListener('message', handleMessage);
     window.addEventListener('message', handleMessage);
 
-    function handleMessage(event) {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'SET_MARKER') {
-          setMarker(data.lat, data.lng, data.title, data.description, data.opacity);
-        } else if (data.type === 'REMOVE_MARKER') {
-          removeMarker();
-        } else if (data.type === 'SET_DESTINATION') {
-          setDestination(data.lat, data.lng, data.title, data.description);
-        } else if (data.type === 'REMOVE_DESTINATION') {
-          removeDestination();
-        } else if (data.type === 'SET_REGION') {
-          map.setView([data.lat, data.lng], data.zoom || map.getZoom());
-        }
-      } catch (e) {}
-    }
+    map.on('load', () => {
+      hideUnneededLayers();
+      map.addSource('urbus-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({
+        id: 'urbus-route-casing', type: 'line', source: 'urbus-route',
+        paint: { 'line-color': '#fff', 'line-width': 9, 'line-opacity': 0.9 }
+      });
+      map.addLayer({
+        id: 'urbus-route-line', type: 'line', source: 'urbus-route',
+        paint: { 'line-color': '#005691', 'line-width': 5, 'line-opacity': 0.95 }
+      });
+      mapReady = true;
+      while (pendingMessages.length) applyMessage(pendingMessages.shift());
+    });
+    map.on('error', () => {
+      if (!mapReady) notifyNative({
+        type: 'MAP_ERROR',
+        error: 'No se pudo cargar la cartografía. Comprueba tu conexión.',
+      });
+    });
+
   </script>
 </body>
 </html>
 `;
 }
 
-/**
- * Props:
- * - region: { latitude, longitude, latitudeDelta, longitudeDelta }
- * - marker: { latitude, longitude, title, description, opacity? } | null
- * - destination: { latitude, longitude, title, description } | null (marcador fijo, ej. Kinal)
- * - style: estilos del contenedor
- */
-export default function OSMMapView({ region, marker, destination, style }) {
+export default function OSMMapView({
+  region,
+  marker,
+  origin,
+  destination,
+  routeGeometry,
+  canEditDestination = false,
+  onDestinationChange,
+  onRouteChange,
+  style,
+}) {
   const webviewRef = useRef(null);
+  const [webviewLoaded, setWebviewLoaded] = useState(false);
+  const markerLatitude = marker?.latitude;
+  const markerLongitude = marker?.longitude;
+  const markerTitle = marker?.title;
+  const markerDescription = marker?.description;
+  const markerOpacity = marker?.opacity;
+  const originLatitude = origin?.latitude;
+  const originLongitude = origin?.longitude;
+  const destinationLatitude = destination?.latitude;
+  const destinationLongitude = destination?.longitude;
+  const destinationTitle = destination?.title;
+  const canEdit = canEditDestination;
+  const [initialRegion] = useState(() => ({
+    latitude: region.latitude,
+    longitude: region.longitude,
+  }));
   const html = useMemo(
-    () => buildHtml(region.latitude, region.longitude, 16),
-    // Solo se genera una vez con la región inicial; después todo se actualiza vía postMessage
-    []
+    () => buildHtml(initialRegion.latitude, initialRegion.longitude, 15),
+    [initialRegion.latitude, initialRegion.longitude],
   );
+  const source = useMemo(() => ({ html }), [html]);
 
   useEffect(() => {
-    if (!webviewRef.current) return;
-    if (marker) {
-      webviewRef.current.postMessage(
-        JSON.stringify({
-          type: 'SET_MARKER',
-          lat: marker.latitude,
-          lng: marker.longitude,
-          title: marker.title,
-          description: marker.description,
-          opacity: marker.opacity,
-        })
-      );
-    } else {
-      webviewRef.current.postMessage(JSON.stringify({ type: 'REMOVE_MARKER' }));
-    }
-  }, [marker?.latitude, marker?.longitude, marker?.title, marker?.description, marker?.opacity]);
+    if (!webviewLoaded || !webviewRef.current) return;
+    webviewRef.current.postMessage(JSON.stringify({
+      type: 'SET_VEHICLE',
+      point: markerLatitude == null || markerLongitude == null
+        ? null
+        : { lat: markerLatitude, lng: markerLongitude },
+      title: markerTitle,
+      description: markerDescription,
+      opacity: markerOpacity,
+    }));
+  }, [webviewLoaded, markerLatitude, markerLongitude, markerTitle, markerDescription, markerOpacity]);
 
   useEffect(() => {
-    if (!webviewRef.current) return;
-    if (destination) {
-      webviewRef.current.postMessage(
-        JSON.stringify({
-          type: 'SET_DESTINATION',
-          lat: destination.latitude,
-          lng: destination.longitude,
-          title: destination.title,
-          description: destination.description,
-        })
-      );
-    } else {
-      webviewRef.current.postMessage(JSON.stringify({ type: 'REMOVE_DESTINATION' }));
+    if (!webviewLoaded || !webviewRef.current) return;
+    webviewRef.current.postMessage(JSON.stringify({
+      type: 'SET_ORIGIN',
+      point: originLatitude == null || originLongitude == null
+        ? null
+        : { lat: originLatitude, lng: originLongitude },
+      title: 'Origen de la ruta',
+    }));
+  }, [webviewLoaded, originLatitude, originLongitude]);
+
+  useEffect(() => {
+    if (!webviewLoaded || !webviewRef.current) return;
+    webviewRef.current.postMessage(JSON.stringify({
+      type: 'SET_DESTINATION',
+      point: destinationLatitude == null || destinationLongitude == null
+        ? null
+        : { lat: destinationLatitude, lng: destinationLongitude },
+      title: destinationTitle || 'Destino de la ruta',
+      canEdit,
+    }));
+  }, [webviewLoaded, destinationLatitude, destinationLongitude, destinationTitle, canEdit]);
+
+  useEffect(() => {
+    if (!webviewLoaded || !webviewRef.current) return;
+    webviewRef.current.postMessage(JSON.stringify({
+      type: 'SET_ROUTE',
+      geometry: routeGeometry ?? null,
+    }));
+  }, [webviewLoaded, routeGeometry]);
+
+  const handleMessage = (event) => {
+    try {
+      const message = JSON.parse(event.nativeEvent.data);
+      if (message.type === 'DESTINATION_CHANGED' && canEditDestination) {
+        onDestinationChange?.(message.point);
+      }
+      if (message.type === 'MAP_ERROR') onRouteChange?.({ status: 'error', error: message.error });
+    } catch (error) {
+      console.error('No se pudo procesar la respuesta del mapa:', error);
     }
-  }, [destination?.latitude, destination?.longitude, destination?.title, destination?.description]);
+  };
 
   return (
     <WebView
       ref={webviewRef}
       originWhitelist={['*']}
-      source={{ html }}
+      source={source}
       style={[styles.webview, style]}
       javaScriptEnabled
       domStorageEnabled
+      onLoadEnd={() => setWebviewLoaded(true)}
+      onMessage={handleMessage}
     />
   );
 }

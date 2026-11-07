@@ -7,13 +7,7 @@ let socket = null;
 
 /**
  * Conecta al namespace raíz de location-service, autenticado con el token.
- * location-service solo entrega la ubicación del conductor a él mismo y a los
- * pasajeros de sus grupos activos:
- * - Todos escuchan "locationStatus" ({ sharing, paused?, lat?, lng?, updatedAt?, ageMs?, reason? }),
- *   "updateBus" y "busArrived". paused: el conductor perdió la conexión y lo que
- *   llega es solo su última posición conocida.
- * - Solo el conductor (DRIVER_ROLE) emite "startSharing" / "busLocation" /
- *   "stopSharing" para compartir su GPS mientras tiene la ruta iniciada.
+ * Las lecturas, rutas e historial se transmiten solo a la sala autorizada del grupo.
  */
 export function connectLocationSocket() {
   if (socket) return socket;
@@ -26,14 +20,30 @@ export function connectLocationSocket() {
   return socket;
 }
 
-export function onUpdateBus(callback) {
-  socket?.on('updateBus', callback);
+export function onItineraryState(callback) {
+  socket?.on('itinerary:state', callback);
 }
-export function onBusArrived(callback) {
-  socket?.on('busArrived', callback);
+export function onItineraryLocation(callback) {
+  socket?.on('itinerary:location', callback);
 }
-export function onLocationStatus(callback) {
-  socket?.on('locationStatus', callback);
+export function onItineraryDestination(callback) {
+  socket?.on('itinerary:destination', callback);
+}
+export function onItineraryRoute(callback) {
+  socket?.on('itinerary:route', callback);
+}
+export function onItineraryInterrupted(callback) {
+  socket?.on('itinerary:interrupted', callback);
+}
+export function onItineraryCompleted(callback) {
+  socket?.on('itinerary:completed', callback);
+}
+export function onItineraryGpsStatus(callback) {
+  socket?.on('itinerary:gps-status', callback);
+}
+export function subscribeItineraryGroup(groupId) {
+  if (!groupId) return;
+  socket?.emit('itinerary:subscribe', { groupId });
 }
 export function onConnectionChange(onConnect, onDisconnect, onError) {
   socket?.on('connect', onConnect);
@@ -54,29 +64,25 @@ export function isLocationSocketConnected() {
 export function isLocationSocketActive() {
   return Boolean(socket?.active);
 }
-/** El conductor empieza a compartir su ubicación con sus grupos. */
-export function emitStartSharing() {
-  socket?.emit('startSharing');
-}
-/** El conductor deja de compartir su ubicación. */
-export function emitStopSharing() {
-  socket?.emit('stopSharing');
-}
 /**
  * Emite la posición GPS del bus ({ lat, lng, timestamp }). Uso exclusivo del conductor.
  * volatile: sin conexión se descarta en vez de acumularse y llegar tarde y en ráfaga.
  */
-export function emitBusLocation(coords) {
-  socket?.volatile.emit('busLocation', coords);
+export function emitBusLocation(groupId, point) {
+  if (groupId) socket?.volatile.emit('itinerary:location', { groupId, point });
 }
 export function disconnectLocationSocket() {
   if (socket) {
-    socket.off('updateBus');
-    socket.off('busArrived');
-    socket.off('locationStatus');
     socket.off('connect');
     socket.off('disconnect');
     socket.off('connect_error');
+    socket.off('itinerary:state');
+    socket.off('itinerary:location');
+    socket.off('itinerary:destination');
+    socket.off('itinerary:route');
+    socket.off('itinerary:interrupted');
+    socket.off('itinerary:completed');
+    socket.off('itinerary:gps-status');
     socket.disconnect();
     socket = null;
   }

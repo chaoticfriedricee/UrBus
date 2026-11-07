@@ -8,11 +8,13 @@ import {
   startBackgroundLocation, stopBackgroundLocation, isBackgroundLocationRunning,
 } from '../services/backgroundLocation';
 import {
-  connectLocationSocket, onUpdateBus, onBusArrived, onLocationStatus, onConnectionChange,
+  connectLocationSocket, onItineraryState, onItineraryLocation, onItineraryCompleted,
+  onItineraryDestination, onItineraryRoute, onItineraryInterrupted, onItineraryGpsStatus,
+  onConnectionChange, subscribeItineraryGroup,
   reconnectLocationSocket, isLocationSocketConnected, isLocationSocketActive,
-  emitStartSharing, emitStopSharing, emitBusLocation, disconnectLocationSocket,
+  emitBusLocation, disconnectLocationSocket,
 } from '../../../shared/sockets/locationSocket';
-import { localTimestamp, shouldSendFix } from '../utils/locationFreshness';
+import { shouldSendFix } from '../utils/locationFreshness';
 
 // distanceInterval 0: con el bus detenido (semáforo, parada) siguen llegando posiciones y
 // los pasajeros no lo ven como "no actualizada". shouldSendFix limita el envío a una cada 2 s.
@@ -24,16 +26,11 @@ const RETRY_DELAYS_MS = [2000, 5000, 15000, 30000, 60000];
 const GPS_UNAVAILABLE = 'No se pudo obtener tu ubicación (¿GPS desactivado o sin señal?). Se seguirá intentando.';
 
 /**
- * Hook de rastreo del bus en tiempo real.
- * location-service solo envía la ubicación del conductor a los pasajeros de sus
- * grupos activos, y solo mientras el conductor la comparte:
- * - sharing: null (aún sin respuesta), true o false.
- * - noGroup: el usuario no pertenece a ningún grupo activo (o es admin).
- * - coords: { lat, lng, updatedAt, seenAt, paused }. seenAt es el reloj de este teléfono;
- *   paused indica que el conductor perdió la conexión (es la última posición conocida).
- * Para DRIVER_ROLE expone startRoute/endRoute: al iniciar la ruta se pide permiso
- * de ubicación, se avisa "startSharing" y se transmite el GPS; al finalizarla (o al
- * cerrar la pantalla) se deja de compartir.
+ * Hook de seguimiento de los recorridos autorizados para el grupo seleccionado.
+ * coords.seenAt usa el reloj de este teléfono; paused indica que la última posición
+ * es conocida, pero la señal GPS del conductor se perdió.
+ * Para DRIVER_ROLE expone startRoute/endRoute para iniciar o interrumpir el envío GPS
+ * de un recorrido que ya fue creado mediante la API autenticada.
  *
  * Segundo plano: con el permiso "Permitir siempre" la ruta usa un servicio con notificación
  * fija (services/backgroundLocation) y sigue enviando aunque el conductor cambie de app o
@@ -45,8 +42,9 @@ const GPS_UNAVAILABLE = 'No se pudo obtener tu ubicación (¿GPS desactivado o s
  * - pausedRoute: el servidor conserva en pausa una ruta del conductor que esta app ya no
  *   transmite (se cerró o se reinició); puede reanudarla con startRoute o terminarla con endRoute.
  */
-export function useBusTracking() {
+export function useBusTracking(groupId, isDriver = false) {
   const [coords, setCoords] = useState(null);
+  const [itinerary, setItinerary] = useState(null);
   const [arrived, setArrived] = useState(false);
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(true);
@@ -81,13 +79,18 @@ export function useBusTracking() {
   const handleFix = useCallback((position) => {
     if (!routeActiveRef.current) return;
     if (mountedRef.current) setGpsError(null);
-    const fix = { lat: position.coords.latitude, lng: position.coords.longitude, timestamp: position.timestamp };
+    const fix = {
+      lat: position.coords.latitude,
+      lng: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+      timestamp: position.timestamp,
+    };
     if (!shouldSendFix(fix, lastSentRef.current, Date.now())) return;
     // Sin conexión no se acumulan posiciones viejas
-    if (!isLocationSocketConnected()) return;
-    emitBusLocation(fix);
+    if (!groupId || !isLocationSocketConnected()) return;
+    emitBusLocation(groupId, fix);
     lastSentRef.current = fix;
-  }, []);
+  }, [groupId]);
 
   // Nunca deja dos watchers: elimina el anterior y descarta este si la ruta terminó mientras se creaba
   const startWatch = useCallback(async () => {
@@ -157,7 +160,6 @@ export function useBusTracking() {
     routeActiveRef.current = false;
     lastSentRef.current = null;
     // Siempre se avisa: también termina una ruta que el servidor tenía en pausa
-    emitStopSharing();
     setRouteActive(false);
     setPausedRoute(false);
     setCoords(null);
@@ -216,8 +218,7 @@ export function useBusTracking() {
           setError(null);
           retriedAuthRef.current = false;
           retry.attempt = 0;
-          // Tras una reconexión el servidor tiene la ruta en pausa hasta recibir esto
-          if (routeActiveRef.current) emitStartSharing();
+          subscribeItineraryGroup(groupId);
         },
         () => mountedRef.current && setConnected(false),
         async (err) => {
@@ -245,28 +246,105 @@ export function useBusTracking() {
           if (!isLocationSocketActive()) scheduleRetry();
         }
       );
-      onLocationStatus((status) => {
-        if (!mountedRef.current) return;
-        setNoGroup(status?.reason === 'NO_GROUP');
-        setSharing(Boolean(status?.sharing));
-        setPausedRoute(Boolean(status?.sharing && status?.paused) && !routeActiveRef.current);
-        if (!status?.sharing) {
-          setCoords(null);
-          setArrived(false);
-        } else if (Number.isFinite(status.lat) && Number.isFinite(status.lng)) {
+      onItineraryState((state) => {
+        if (!mountedRef.current || state?.groupId !== groupId) return;
+        const trip = state.activeTrip;
+        setItinerary(state);
+        setNoGroup(false);
+        setSharing(Boolean(trip));
+        setPausedRoute(Boolean(trip && trip.gpsStatus === 'DESCONECTADO'));
+        const location = trip?.currentLocation ?? state.lastTrip?.currentLocation;
+        if (location) {
+          const locationAgeMs = trip?.locationAgeMs ?? state.lastTrip?.locationAgeMs ?? 86400000;
           setCoords({
-            lat: status.lat, lng: status.lng, updatedAt: status.updatedAt,
-            seenAt: localTimestamp(status, Date.now()), paused: Boolean(status.paused),
+            ...location,
+            updatedAt: trip?.lastLocationAt ?? state.lastTrip?.lastLocationAt,
+            seenAt: Date.now() - locationAgeMs,
+            paused: !trip || trip.gpsStatus === 'DESCONECTADO',
           });
-        } else {
-          setCoords((prev) => (prev ? { ...prev, paused: Boolean(status.paused) } : prev));
+        } else if (!trip) {
+          setCoords(null);
+        }
+        if (state.lastTrip?.status === 'COMPLETADO') setArrived(true);
+        if (isDriver && trip?.status === 'EN_CURSO') {
+          routeActiveRef.current = true;
+          setRouteActive(true);
+          Location.getForegroundPermissionsAsync().then(({ status }) => {
+            if (status === 'granted' && routeActiveRef.current) startTransmitting();
+            else if (mountedRef.current) setGpsError('Permite la ubicación GPS para continuar el recorrido activo.');
+          }).catch(() => mountedRef.current && setGpsError(GPS_UNAVAILABLE));
+        } else if (isDriver && routeActiveRef.current) {
+          routeActiveRef.current = false;
+          stopTransmitting();
+          setRouteActive(false);
+          setSharing(false);
+          setBackgroundMode(null);
         }
       });
-      onUpdateBus((data) => {
+      onItineraryLocation((data) => {
         if (!mountedRef.current) return;
-        setCoords({ lat: data.lat, lng: data.lng, updatedAt: data.updatedAt, seenAt: Date.now(), paused: false });
+        if (data?.groupId !== groupId || !data.location) return;
+        setCoords({
+          ...data.location,
+          updatedAt: data.updatedAt,
+          seenAt: Date.now(),
+          paused: false,
+        });
       });
-      onBusArrived(() => { if (mountedRef.current) setArrived(true); });
+      onItineraryDestination((data) => {
+        if (!mountedRef.current || data?.groupId !== groupId) return;
+        setItinerary((current) => current ? {
+          ...current,
+          destination: data.destination,
+          activeTrip: data.activeTrip ?? current.activeTrip,
+        } : current);
+      });
+      onItineraryRoute((data) => {
+        if (!mountedRef.current || data?.groupId !== groupId || !data.trip) return;
+        setItinerary((current) => current ? { ...current, activeTrip: data.trip } : current);
+      });
+      onItineraryInterrupted((data) => {
+        if (!mountedRef.current || data?.groupId !== groupId) return;
+        setItinerary((current) => ({ ...current, activeTrip: null, lastTrip: data.trip }));
+        routeActiveRef.current = false;
+        stopTransmitting();
+        setRouteActive(false);
+        setSharing(false);
+        setBackgroundMode(null);
+      });
+      onItineraryGpsStatus((data) => {
+        if (!mountedRef.current || data?.groupId !== groupId) return;
+        setPausedRoute(data.status === 'DESCONECTADO');
+        setItinerary((current) => current?.activeTrip ? {
+          ...current,
+          activeTrip: {
+            ...current.activeTrip,
+            gpsStatus: data.status,
+            lastLocationAt: data.updatedAt ?? current.activeTrip.lastLocationAt,
+            locationAgeMs: data.status === 'CONECTADO' ? 0 : current.activeTrip.locationAgeMs,
+          },
+        } : current);
+        setCoords((current) => current ? {
+          ...current,
+          updatedAt: data.updatedAt ?? current.updatedAt,
+          seenAt: data.status === 'CONECTADO' ? Date.now() : current.seenAt,
+          paused: data.status === 'DESCONECTADO',
+        } : current);
+      });
+      onItineraryCompleted((data) => {
+        if (!mountedRef.current || data?.groupId !== groupId) return;
+        setArrived(true);
+        setItinerary((current) => ({
+          ...current,
+          activeTrip: null,
+          lastTrip: data.trip,
+        }));
+        routeActiveRef.current = false;
+        stopTransmitting();
+        setRouteActive(false);
+        setSharing(false);
+        setBackgroundMode(null);
+      });
     } catch (err) {
       setError(err?.message ?? 'No se pudo conectar al servicio de ubicación');
       setConnecting(false);
@@ -279,12 +357,10 @@ export function useBusTracking() {
       retry.timer = null;
       setBackgroundFixHandler(null);
       stopTransmitting();
-      // Al cerrar la pantalla se deja de compartir (antes de desconectar, para que llegue)
-      if (routeActiveRef.current) emitStopSharing();
       routeActiveRef.current = false;
       disconnectLocationSocket();
     };
-  }, [handleFix, startTransmitting, stopTransmitting, finishRoute]);
+  }, [groupId, isDriver, handleFix, startTransmitting, stopTransmitting, finishRoute]);
 
   const resetArrived = useCallback(() => setArrived(false), []);
 
@@ -314,8 +390,6 @@ export function useBusTracking() {
       setRouteActive(true);
       routeActiveRef.current = true;
       lastSentRef.current = null;
-      // Sin conexión lo envía el manejador de "connect" al conectar
-      if (isLocationSocketConnected()) emitStartSharing();
       await startTransmitting();
     } finally {
       startingRef.current = false;
@@ -328,7 +402,7 @@ export function useBusTracking() {
   const openLocationSettings = useCallback(() => Linking.openSettings(), []);
 
   return {
-    coords, arrived, connected, connecting, sharing, noGroup, error, gpsError, routeActive, pausedRoute,
+    coords, itinerary, arrived, connected, connecting, sharing, noGroup, error, gpsError, routeActive, pausedRoute,
     backgroundMode, resetArrived, startRoute, endRoute, openLocationSettings,
   };
 }
