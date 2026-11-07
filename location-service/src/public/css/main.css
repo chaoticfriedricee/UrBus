@@ -8,12 +8,65 @@ body {
 #map-template {
     height: 100vh;
     width: 100%;
-    position: absolute;
+    position: fixed;
+    inset: 0;
 }
 
-.bus-icon {
-    font-size: 30px;
+.urbus-marker {
     display: flex;
+    width: 30px;
+    height: 30px;
     align-items: center;
     justify-content: center;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    color: #fff;
+    font: 700 13px/1 system-ui, sans-serif;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+}
+
+.urbus-marker-bus {
+    width: 38px;
+    height: 38px;
+    border-width: 2px;
+    background: #005691;
+    font-size: 22px;
+}
+
+.urbus-marker-bus::after {
+    content: '🚌';
+}
+
+.urbus-marker-origin {
+    background: #16a34a;
+}
+
+.urbus-marker-origin::after {
+    content: 'A';
+}
+
+.urbus-marker-destination {
+    background: #dc2626;
+}
+
+.urbus-marker-destination::after {
+    content: 'B';
+}
+
+#route-summary {
+    position: fixed;
+    z-index: 2;
+    top: 12px;
+    left: 12px;
+    max-width: calc(100vw - 72px);
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.96);
+    color: #374151;
+    font: 600 13px/1.4 system-ui, sans-serif;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+#route-summary.route-error {
+    color: #b91c1c;
 }

@@ -14,7 +14,10 @@ import { corsOptions } from './cors.configuration.js';
 import { helmetOptions } from './helmet.configuration.js';
 import { requestLimit } from './rateLimit.configuration.js';
 import { errorHandler } from '../middlewares/handle-errors.js';
-import { registerLocationSocket } from '../src/location/location.socket.js';
+import itineraryRoutes from '../src/itinerary/itinerary.routes.js';
+import { registerItinerarySocket } from '../src/itinerary/itinerary.socket.js';
+import { fetchGroupAccess } from '../src/itinerary/itinerary.auth.js';
+import { closeDbConnection, dbConnection } from './db.js';
 
 const BASE_PATH = '/urbus/v1';
 const swaggerDoc = parse(readFileSync('./swagger.yaml', 'utf8'));
@@ -41,8 +44,12 @@ const routes = (app) => {
     });
 
     app.get(`${BASE_PATH}/`, (req, res) => {
-        res.render('index');
+        res.render('index', {
+            mapStyleUrl: process.env.MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty',
+        });
     });
+
+    app.use(`${BASE_PATH}`, itineraryRoutes);
 };
 
 // Separado de initServer para poder montar el servidor en las pruebas sin abrir el puerto real
@@ -57,15 +64,18 @@ export const createServer = (socketOptions) => {
 
     const server = http.createServer(app);
     const io = new Server(server, { cors: { origin: "*" } });
-    registerLocationSocket(io, socketOptions);
+    app.locals.io = io;
+    app.locals.getGroupAccess = socketOptions?.getAccess ?? fetchGroupAccess;
+    const socketLifecycle = registerItinerarySocket(io, socketOptions);
+    io.on('close', socketLifecycle.dispose);
 
     return { app, server, io };
 };
 
 export const initServer = async () => {
-    const PORT = process.env.PORT;
-
-    try {
+      try {
+          await dbConnection();
+          const PORT = Number(process.env.PORT) || 3033;
         const { server } = createServer();
 
         server.listen(PORT, () => {
@@ -76,6 +86,7 @@ export const initServer = async () => {
 
     } catch (err) {
         console.error(`Error al iniciar el servidor: ${err.message}`);
-        process.exit(1);
-    }
+          await closeDbConnection();
+          process.exit(1);
+      }
 };
