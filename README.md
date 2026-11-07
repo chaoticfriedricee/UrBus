@@ -182,28 +182,25 @@ Servicio encargado de la ubicación en tiempo real del bus.
  
 ### Funcionalidades
  
-* Seguimiento de ubicación con Socket.IO, autenticado con el access token (`io(url, { auth: { token } })`)
-* El conductor comparte su ubicación solo cuando lo decide (`startSharing` / `stopSharing`)
-* Si el conductor pierde la conexión sin finalizar la ruta, esta queda en pausa (`paused: true`, solo la última posición conocida) durante `LOCATION_SHARING_GRACE_MS` (5 min por defecto) y termina sola si no vuelve
-* Las posiciones llevan el `timestamp` del GPS: se descartan las repetidas o más viejas que la última
-* La ubicación solo llega al conductor y a los pasajeros de sus grupos activos (`locationStatus`, `updateBus`, `busArrived`)
-* Solo se guarda en memoria la última posición de quien comparte; no hay historial
-* Detección de llegada a Kinal por conductor y emisión del evento `busArrived`
-* Vista pública en `/urbus/v1/` (sin sesión: muestra el mapa pero no transmite ni recibe ubicaciones)
+* Cada grupo mantiene su propio destino (Kinal por defecto) y un historial independiente.
+* El conductor selecciona el grupo, configura el destino y comienza manualmente el recorrido desde una posición GPS recién obtenida. El servidor calcula y recalcula la ruta vehicular con OSRM.
+* Las ubicaciones y recorridos se guardan en MongoDB (`URI_MONGODB`). Un grupo solo puede tener un recorrido `EN_CURSO`; finalizar por llegada o interrumpirlo conserva el historial.
+* Socket.IO usa salas por grupo y requiere sesión. El backend consulta `PASSENGER_SERVICE_URL` (por defecto `http://localhost:3011/urbus/v1`) para autorizar conductores y pasajeros; cada pasajero solo puede ver el grupo al que pertenece.
+* Lecturas GPS con marca de tiempo repetida o antigua se descartan. Si una lectura nueva se mueve menos de 1 m, se actualizan GPS y frescura, pero no se agrega ni difunde un punto idéntico.
+* La ruta se recalcula al superar el desvío configurado, y se completa tras dos lecturas GPS válidas dentro del radio de llegada.
+* La página pública `/urbus/v1/` solo muestra un mapa informativo; no transmite ni expone ubicaciones. El seguimiento está disponible en las aplicaciones con sesión iniciada.
 
-Requiere `PASSENGER_SERVICE_URL` (por defecto `http://localhost:3011/urbus/v1`) para validar a qué conductor puede seguir cada usuario.
+Configuración de GPS y rutas (valores predeterminados):
 
-### Ubicación con la app en segundo plano
+| Variable | Predeterminado | Uso |
+| -------- | -------------- | --- |
+| `GPS_STALE_AFTER_MS` | `20000` | Antigüedad máxima para considerar la señal GPS actual |
+| `ROUTE_DEVIATION_METERS` | `100` | Distancia al trazado que activa un recálculo |
+| `ROUTE_REROUTE_COOLDOWN_MS` | `30000` | Tiempo mínimo entre recálculos |
+| `ARRIVAL_RADIUS_METERS` | `50` | Radio de llegada al destino |
+| `ARRIVAL_MAX_GPS_ACCURACY_METERS` | `35` | Precisión máxima considerada para completar |
 
-El conductor comparte desde el navegador (`client-admin`) o desde la app Expo (`client-user`), y en ambos casos **solo mientras UrBus está en pantalla**:
-
-* Al cambiar a otra app (p. ej. WhatsApp) o bloquear la pantalla, el navegador o el sistema dejan de entregar el GPS y suspenden la página/app; después se corta la conexión y el servidor pone la ruta en pausa. Ningún código web puede evitarlo, y un service worker tampoco tiene acceso al GPS.
-* Al volver, se reconecta solo (renovando el token si venció), reanuda la ruta y pide una posición nueva, sin pulsar "Iniciar Ruta" otra vez. Si el permiso de ubicación se retiró, deja de compartir y lo avisa.
-* Si la página se recargó o la app se reinició, el conductor ve "Tu ruta quedó en pausa" y decide si reanudarla o finalizarla.
-* En el navegador se pide un *wake lock* de pantalla mientras la ruta está activa, para que el bloqueo automático no la suspenda (no impide bloquearla a mano).
-* Los pasajeros ven la antigüedad de la posición: "En vivo", "Ubicación no actualizada · última hace X min" (más de 45 s sin posiciones) o "Conexión con el conductor perdida"; el marcador se atenúa cuando no es en vivo.
-
-Seguir enviando la ubicación con la app en segundo plano requiere una app nativa con seguimiento en segundo plano (servicio en primer plano con notificación en Android, modo `location` en iOS), que aún no está implementada.
+El cliente móvil puede continuar el seguimiento en segundo plano con el permiso de ubicación correspondiente; el cliente web depende de que el navegador permanezca activo. Al reconectar, el cliente recupera el estado persistido del grupo.
  
 ### Endpoints
  
@@ -216,8 +213,20 @@ http://localhost:3033/urbus/v1
 | Método | Endpoint | Descripción         |
 | ------ | -------- | ------------------- |
 | GET    | /health  | Estado del servicio |
-| GET    | /        | Vista de ubicación  |
+| GET    | /        | Mapa público informativo |
 | GET    | /swagger | Documentación de la API (Swagger UI) |
+| GET    | /itineraries/access | Grupos accesibles por el usuario autenticado |
+| GET/PUT | /itineraries/:groupId | Estado de grupo / actualizar destino |
+| GET/POST | /itineraries/:groupId/trips | Historial / iniciar recorrido |
+| POST | /itineraries/:groupId/trips/interrupt | Interrumpir recorrido |
+
+Los clientes se suscriben mediante `itinerary:subscribe`, que devuelve el estado persistido
+del grupo al conectar o reconectar. `itinerary:sync` permite solicitarlo otra vez sin alterar
+la suscripción. Los eventos de grupo incluyen `itinerary:state`, `itinerary:started`,
+`itinerary:destination`, `itinerary:location`, `itinerary:route`, `itinerary:completed`,
+`itinerary:interrupted` y `itinerary:gps-status`. Los comandos de escritura (`itinerary:start`,
+`itinerary:destination`, `itinerary:location` e `itinerary:interrupt`) solo se aceptan al
+conductor autorizado.
  
 ---
  
@@ -430,14 +439,49 @@ cd authentication-service && pnpm test   # necesita PostgreSQL (crea y borra urb
 cd passenger-service && pnpm test        # necesita MongoDB (usa urbus_passenger_test)
 cd post-service && pnpm test             # necesita MongoDB (usa urbus_posts_test)
 cd location-service && pnpm test         # sin base de datos
-cd client-admin && pnpm test             # ciclo de vida de la ubicación compartida en el navegador
+cd client-admin && pnpm test             # ubicación compartida y cálculo de rutas OSRM
 cd client-user && pnpm test              # antigüedad de la ubicación en la app móvil
 ```
 
 Con `docker compose` levantado, PostgreSQL y MongoDB ya están disponibles en los puertos por defecto. `TEST_DB_NAME` y `TEST_URI_MONGODB` permiten cambiar las bases de prueba.
  
 ---
- 
+
+## Mapa de rutas
+
+Las vistas de seguimiento en `client-admin`, `client-user` y la página del `location-service` usan MapLibre GL JS y el estilo Liberty de OpenFreeMap, con datos cartográficos de OpenStreetMap. Las capas de establecimientos, edificios 3D y relieve se ocultan; se mantienen las etiquetas de calles y zonas. El GPS recibido por Socket.IO mueve el marcador del vehículo sin reconstruir el mapa.
+
+Cada grupo tiene una configuración de destino independiente (Kinal por defecto) y un historial de recorridos separado. El conductor selecciona uno de sus grupos, arrastra el marcador del destino y pulsa **Iniciar recorrido**; el origen se toma del GPS en ese momento y el servidor calcula la geometría GeoJSON con OSRM (`driving`). No existen horarios ni itinerarios programados. Si cambia el destino durante un recorrido, el servidor recalcula la ruta desde la última ubicación GPS válida.
+
+Los recorridos y sus posiciones se guardan en MongoDB. Al llegar al destino, dos lecturas GPS válidas dentro del radio configurado completan el recorrido automáticamente. Los clientes usan salas Socket.IO por `groupId`; los pasajeros solo reciben el estado, destino, geometría y ubicación de su grupo. Al reconectarse, el cliente vuelve a consultar el estado persistido.
+
+Endpoints del `location-service` (requieren `Authorization: Bearer <access-token>`):
+
+* `GET /urbus/v1/itineraries/access` — grupos autorizados para el usuario.
+* `GET /urbus/v1/itineraries/:groupId` — destino, recorrido activo y estado reciente.
+* `PUT /urbus/v1/itineraries/:groupId` — actualiza el destino del grupo (solo su conductor).
+* `POST /urbus/v1/itineraries/:groupId/trips` — inicia un recorrido desde coordenadas GPS.
+* `GET /urbus/v1/itineraries/:groupId/trips` — historial de recorridos del grupo.
+* `POST /urbus/v1/itineraries/:groupId/trips/interrupt` — interrumpe el recorrido activo.
+
+Socket.IO usa `itinerary:subscribe`, `itinerary:sync`, `itinerary:location` y eventos de estado (`itinerary:started`, `itinerary:destination`, `itinerary:route`, `itinerary:completed`, `itinerary:interrupted`, `itinerary:gps-status`). Las operaciones de escritura se validan en el servidor por rol y grupo.
+
+Configurar en `client-admin/.env`:
+
+```env
+VITE_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
+```
+
+Configurar en `client-user/.env`:
+
+```env
+EXPO_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
+```
+
+`location-service` requiere `URI_MONGODB`, `PASSENGER_SERVICE_URL` y `OSRM_URL` (base de rutas con `/route/v1/driving`); `MAP_STYLE_URL` define el mapa web informativo del servicio. La configuración Docker y Render deben apuntar a una base MongoDB persistente. El servidor público de OSRM sirve para desarrollo y pruebas; producción debe usar un proveedor o instancia propia con límites, disponibilidad y política de privacidad adecuados. El acceso a OpenFreeMap, OSRM y los CDN de MapLibre requiere conexión a Internet.
+
+---
+
 ## Contribución
  
 El desarrollo del proyecto se realiza de forma colaborativa entre distintos equipos de estudiantes.

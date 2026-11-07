@@ -2,127 +2,30 @@ openapi: 3.0.3
 info:
   title: UrBus Location Service API
   description: |
-    Microservicio de rastreo de ubicación en tiempo real para la plataforma UrBus.
+    API REST y Socket.IO para recorridos GPS de UrBus. La ruta configurada y el historial
+    pertenecen a cada grupo (`groupId`); Kinal es el destino inicial. El conductor inicia
+    manualmente, el origen se toma del GPS actual y OSRM calcula la ruta driving.
 
-    Combina una API HTTP REST y una capa de **WebSockets via Socket.IO** para transmitir
-    la ubicación del bus en tiempo real a todos los clientes conectados.
+    La persistencia usa MongoDB (`URI_MONGODB`). Cada grupo admite como máximo un
+    recorrido `EN_CURSO`; los recorridos completados e interrumpidos permanecen en el
+    historial. Los canales Socket.IO son salas por grupo y todos los comandos de escritura
+    validan el rol y la pertenencia al grupo en el servidor.
 
-    El mapa se renderiza con **Leaflet.js + OpenStreetMap** directamente desde este servicio.
+    Socket.IO conecta a la raíz del servicio:
+    `io("http://localhost:3033", { auth: { token: accessToken } })`.
 
-    ---
+    Los comandos del conductor incluyen `itinerary:start`, `itinerary:destination`,
+    `itinerary:location` e `itinerary:interrupt`. Los pasajeros solo pueden suscribirse
+    al grupo que les asigna passenger-service. `itinerary:subscribe` devuelve el estado
+    persistido al conectar o reconectar; `itinerary:sync` permite consultarlo de nuevo
+    sin cambiar la sala.
 
-    ## Arquitectura
+    Eventos de difusión por sala: `itinerary:state`, `itinerary:started`,
+    `itinerary:destination`, `itinerary:location`, `itinerary:route`,
+    `itinerary:completed`, `itinerary:interrupted`, `itinerary:gps-status`.
 
-    ```
-    Conductor (navegador)
-        │
-        ├── navigator.geolocation.watchPosition()
-        │       └── socket.emit("busLocation", { lat, lng })
-        │                           │
-        │               Socket.IO Server
-        │       io.to("driver:<id>").emit("updateBus", coords)
-        │                           │
-        └── Pasajeros de sus grupos ← reciben coordenadas en tiempo real
-    ```
-
-    ---
-
-    ## WebSocket — Eventos Socket.IO
-
-    Conectarse al servidor Socket.IO en la raíz del servidor (sin path especial):
-
-    ```javascript
-    const socket = io("http://localhost:PORT", { auth: { token: accessToken } });
-    ```
-
-    La conexión exige el access token JWT. location-service consulta
-    `GET /groups/access` de passenger-service (variable `PASSENGER_SERVICE_URL`)
-    y rechaza la conexión con `UNAUTHORIZED` si el token no es válido.
-
-    - Cada conductor tiene una sala propia; entran él y los pasajeros de sus
-      grupos activos. Nadie más recibe su ubicación.
-    - Solo se guarda en memoria la última posición de quien comparte; no hay historial.
-
-    ### Eventos emitidos por el cliente (solo `DRIVER_ROLE`)
-
-    **`startSharing`** — el conductor empieza a compartir su ubicación.
-
-    **`stopSharing`** — deja de compartirla (de inmediato).
-
-    Si el conductor se desconecta sin `stopSharing` (app en segundo plano, pantalla
-    bloqueada, cambio de red), la ruta queda **en pausa** durante
-    `LOCATION_SHARING_GRACE_MS` (5 minutos por defecto): los pasajeros reciben
-    `locationStatus` con `paused: true` y la última posición conocida. Si el conductor
-    se reconecta y vuelve a emitir `startSharing`, la ruta continúa; si no, termina sola.
-
-    **`busLocation`**
-    Envía la ubicación GPS actual del bus al servidor. Se ignora si el conductor
-    no emitió antes `startSharing`, o si la emite un pasajero.
-
-    ```javascript
-    socket.volatile.emit("busLocation", {
-      lat: 14.6258,
-      lng: -90.5366,
-      timestamp: position.timestamp
-    });
-    ```
-
-    | Campo     | Tipo   | Descripción |
-    |-----------|--------|-------------|
-    | lat       | number | Latitud GPS del bus |
-    | lng       | number | Longitud GPS del bus |
-    | timestamp | number | Opcional. Momento (ms, reloj del conductor) en que el GPS tomó la posición. Se descartan posiciones con un `timestamp` igual o anterior al último recibido en la ruta, para no mover el bus hacia atrás con posiciones repetidas o reenviadas. |
-
-    Se recomienda `volatile` para no acumular posiciones mientras no hay conexión.
-
-    ---
-
-    ### Eventos emitidos por el servidor (solo a la sala del conductor)
-
-    **`locationStatus`**
-    Se envía al conectar y cada vez que el conductor empieza, pausa o deja de compartir:
-    `{ sharing: boolean, paused?, lat?, lng?, updatedAt?, ageMs?, reason? }`.
-    - `reason: "NO_GROUP"`: el usuario no pertenece a ningún grupo activo (o es admin).
-    - `paused: true`: el conductor perdió la conexión; `lat`/`lng` son solo la última
-      posición conocida y no deben mostrarse como ubicación en vivo.
-    - `ageMs`: antigüedad de esa posición al enviarse el evento (no depende de que el
-      reloj del dispositivo coincida con el del servidor).
-
-    **`updateBus`**
-    Se emite a la sala del conductor cada vez que envía una nueva ubicación.
-
-    ```javascript
-    socket.on("updateBus", (coords) => {
-      // coords = { lat: number, lng: number, updatedAt: string }
-      busMarker.setLatLng([coords.lat, coords.lng]);
-    });
-    ```
-
-    ---
-
-    **`busArrived`**
-    Se emite una única vez cuando el bus llega a las coordenadas de Kinal
-    dentro de una tolerancia de ~20 metros (0.0002 grados).
-
-    Coordenadas de destino: `lat 14.6258, lng -90.5360`
-
-    ```javascript
-    socket.on("busArrived", () => {
-      // mostrar notificación de llegada
-    });
-    ```
-
-    Se emite una vez por llegada y por conductor; se rearma cuando el bus sale de Kinal.
-
-    ---
-
-    ## Mapa Leaflet
-
-    La vista principal (`GET /urbus/v1/`) renderiza un mapa interactivo con:
-    - Tile layer de OpenStreetMap
-    - Marcador fijo en Kinal (lat 14.6245, lng -90.5366)
-    - Marcador dinámico del bus (emoji 🚌) actualizado via WebSocket
-    - Detección de llegada a Kinal con tolerancia de 50 metros (Haversine)
+    `GET /urbus/v1/` es una página informativa sin ubicación de pasajeros ni comandos
+    GPS; el seguimiento requiere una sesión autenticada en las aplicaciones UrBus.
   version: 1.0.0
 
 servers:
@@ -135,8 +38,10 @@ servers:
 tags:
   - name: Health
     description: Estado del servicio
+  - name: Itineraries
+    description: Rutas configuradas por grupo y recorridos
   - name: Map
-    description: Interfaz del mapa Leaflet
+    description: Página informativa MapLibre
 
 paths:
   /health:
@@ -164,26 +69,25 @@ paths:
     get:
       tags:
         - Map
-      summary: Vista del mapa de rastreo
+      summary: Vista pública informativa del mapa
       operationId: getMapView
       description: |
-        Renderiza la página HTML con el mapa Leaflet + OpenStreetMap.
-        Es una vista pública sin sesión: ya no transmite el GPS del visitante y
-        la ubicación del bus solo está disponible en las apps de UrBus.
+        Renderiza una página informativa con MapLibre. No transmite ni expone
+        ubicaciones; el seguimiento requiere autenticación en las aplicaciones UrBus.
       responses:
         '200':
-          description: HTML con el mapa Leaflet renderizado
+          description: HTML con el mapa MapLibre renderizado
           content:
             text/html:
               schema:
                 type: string
-                description: Página HTML con mapa interactivo
+                description: Página informativa del mapa
 
   /css/main.css:
     get:
       tags:
         - Map
-      summary: Estilos del mapa
+      summary: Estilos de la página informativa
       operationId: getStyles
       responses:
         '200':
@@ -197,9 +101,9 @@ paths:
     get:
       tags:
         - Map
-      summary: Script del mapa
+      summary: Inicializador del mapa informativo
       operationId: getScript
-      description: Script que inicializa el mapa Leaflet, conecta el Socket.IO y maneja la geolocalización.
+      description: Inicializa el mapa MapLibre sin conectarse a Socket.IO ni solicitar ubicación.
       responses:
         '200':
           description: JavaScript del mapa
@@ -208,8 +112,140 @@ paths:
               schema:
                 type: string
 
+  /itineraries/access:
+    get:
+      tags:
+        - Itineraries
+      summary: Grupos disponibles para el usuario autenticado
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Identidad y grupos autorizados
+        '401':
+          description: Token inválido
+
+  /itineraries/{groupId}:
+    parameters:
+      - name: groupId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Itineraries
+      summary: Estado de ruta y recorrido del grupo
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Configuración, recorrido activo y última instancia
+        '403':
+          description: El usuario no pertenece al grupo
+    put:
+      tags:
+        - Itineraries
+      summary: Actualiza el destino del grupo
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destination]
+              properties:
+                destination:
+                  $ref: '#/components/schemas/Coordinate'
+      responses:
+        '200':
+          description: Destino guardado y ruta activa recalculada si aplica
+        '403':
+          description: Solo el conductor asignado puede modificar el destino
+        '409':
+          description: No hay señal GPS actual para recalcular una ruta activa
+
+  /itineraries/{groupId}/trips:
+    parameters:
+      - name: groupId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Itineraries
+      summary: Historial de recorridos del grupo
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Recorridos ordenados del más reciente al más antiguo
+    post:
+      tags:
+        - Itineraries
+      summary: Inicia un recorrido manual desde el GPS actual
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [origin]
+              properties:
+                origin:
+                  $ref: '#/components/schemas/Coordinate'
+                vehicleId:
+                  type: string
+                  nullable: true
+      responses:
+        '201':
+          description: Recorrido iniciado y ruta OSRM almacenada
+        '409':
+          description: Ya existe un recorrido activo para el grupo
+
+  /itineraries/{groupId}/trips/interrupt:
+    post:
+      tags:
+        - Itineraries
+      summary: Interrumpe el recorrido activo
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recorrido guardado como INTERRUMPIDO
+        '409':
+          description: No hay un recorrido activo
+
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
+    Coordinate:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          minimum: -180
+          maximum: 180
     BusCoords:
       type: object
       description: Coordenadas GPS del bus
