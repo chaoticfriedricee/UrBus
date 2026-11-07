@@ -9,7 +9,7 @@ services:
     name: urbus-auth-service
     runtime: docker
     dockerfilePath: ./dockerfiles/Dockerfile.auth-service
-    dockerContext: ./authentication-service
+    dockerContext: .
     plan: free
     healthCheckPath: /health
     envVars:
@@ -63,6 +63,14 @@ services:
         sync: false
       - key: CLOUDINARY_DEFAULT_AVATAR
         sync: false
+      - key: BREVO_ENABLED
+        value: "true"
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_FROM_EMAIL
+        sync: false
+      - key: BREVO_FROM_NAME
+        value: UrBus Support
       - key: SMTP_ENABLED
         value: "true"
       - key: SMTP_HOST
@@ -84,7 +92,7 @@ services:
     name: urbus-passenger-service
     runtime: docker
     dockerfilePath: ./dockerfiles/Dockerfile.passenger-service
-    dockerContext: ./passenger-service
+    dockerContext: .
     plan: free
     healthCheckPath: /urbus/v1/health
     envVars:
@@ -103,7 +111,7 @@ services:
     name: urbus-post-service
     runtime: docker
     dockerfilePath: ./dockerfiles/Dockerfile.post-service
-    dockerContext: ./post-service
+    dockerContext: .
     plan: free
     healthCheckPath: /urbus/v1/health
     envVars:
@@ -130,7 +138,7 @@ services:
     name: urbus-location-service
     runtime: docker
     dockerfilePath: ./dockerfiles/Dockerfile.location-service
-    dockerContext: ./location-service
+    dockerContext: .
     plan: free
     healthCheckPath: /urbus/v1/health
     envVars:
