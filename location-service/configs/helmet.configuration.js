@@ -1,3 +1,7 @@
+const mapStyleOrigin = new URL(
+    process.env.MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/liberty',
+).origin;
+
 export const helmetOptions = {
     contentSecurityPolicy: {
         useDefaults: true,
@@ -10,8 +14,10 @@ export const helmetOptions = {
                 "'self'",
                 "ws:",
                 "wss:",
-                "https://unpkg.com"
+                "https://unpkg.com",
+                mapStyleOrigin,
             ],
+            workerSrc: ["'self'", 'blob:'],
             fontSrc: ["'self'"],
             objectSrc: ["'none'"],
             baseUri: ["'self'"],

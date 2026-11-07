@@ -87,6 +87,20 @@ services:
         sync: false
       - key: SMTP_FROM_NAME
         sync: false
+      - key: MAP_STYLE_URL
+        value: https://tiles.openfreemap.org/styles/liberty
+      - key: OSRM_URL
+        sync: false
+      - key: GPS_STALE_AFTER_MS
+        value: "20000"
+      - key: ROUTE_DEVIATION_METERS
+        value: "100"
+      - key: ROUTE_REROUTE_COOLDOWN_MS
+        value: "30000"
+      - key: ARRIVAL_RADIUS_METERS
+        value: "50"
+      - key: ARRIVAL_MAX_GPS_ACCURACY_METERS
+        value: "35"
 
   - type: web
     name: urbus-passenger-service
@@ -144,5 +158,7 @@ services:
     envVars:
       - key: URI_MONGODB
         sync: false
+      - key: VITE_MAP_STYLE_URL
+        value: https://tiles.openfreemap.org/styles/liberty
       - key: PASSENGER_SERVICE_URL
         sync: false

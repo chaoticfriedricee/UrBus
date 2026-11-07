@@ -1,6 +1,4 @@
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import { initServer } from './configs/app.js';
-
-dotenv.config();
 
 initServer();

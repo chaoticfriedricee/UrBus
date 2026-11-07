@@ -90,6 +90,13 @@ services:
       URI_MONGODB: mongodb://mongo:27017/UrBus
       # Autoriza quién puede ver la ubicación de cada conductor
       PASSENGER_SERVICE_URL: http://passenger-service:${PASSENGER_PORT}/urbus/v1
+      MAP_STYLE_URL: ${MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+      OSRM_URL: ${OSRM_URL:-https://router.project-osrm.org/route/v1/driving}
+      GPS_STALE_AFTER_MS: ${GPS_STALE_AFTER_MS:-20000}
+      ROUTE_DEVIATION_METERS: ${ROUTE_DEVIATION_METERS:-100}
+      ROUTE_REROUTE_COOLDOWN_MS: ${ROUTE_REROUTE_COOLDOWN_MS:-30000}
+      ARRIVAL_RADIUS_METERS: ${ARRIVAL_RADIUS_METERS:-50}
+      ARRIVAL_MAX_GPS_ACCURACY_METERS: ${ARRIVAL_MAX_GPS_ACCURACY_METERS:-35}
     volumes:
       - ./location-service:/app
       - /app/node_modules
@@ -163,6 +170,7 @@ services:
         VITE_AUTH_URL: ${VITE_AUTH_URL}
         VITE_POST_URL: ${VITE_POST_URL}
         VITE_PASSENGER_URL: ${VITE_PASSENGER_URL}
+        VITE_MAP_STYLE_URL: ${VITE_MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
     container_name: urbus_client_admin
     environment:
       PORT: ${CLIENT_ADMIN_PORT}

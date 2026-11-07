@@ -23,6 +23,7 @@ docker-compose.override.yml
 **/tmp/
 
 # Build results
+location-service/data/itineraries.json
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/

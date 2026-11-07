@@ -1,309 +1,365 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../auth/store/authStore.js';
 import { refreshAccessToken } from '../../../shared/api/api.js';
+import { useGroupStore } from '../../groups/store/groupStore.js';
 import { styles } from '../../../styles/location.js';
-import { createLocationSharing, createSocketRecovery } from '../services/locationSharing.js';
-import { describeFreshness, formatAge, localTimestamp } from '../services/locationFreshness.js';
+import LocationMap from '../components/LocationMap.jsx';
+import { createSocketRecovery } from '../services/socketRecovery.js';
+import {
+  getItinerary,
+  getItineraryAccess,
+  interruptGroupTrip,
+  startGroupTrip,
+  updateGroupDestination,
+} from '../services/itineraryApi.js';
+import { formatAge } from '../services/locationFreshness.js';
 
-const LOCATION_SERVICE_URL = import.meta.env.VITE_LOCATION_SERVICE_URL || 'http://localhost:3033/urbus/v1';
-// Socket.IO se sirve en la raíz del servicio (/socket.io/), no bajo /urbus/v1. Además,
-// io('http://host/urbus/v1') interpreta "/urbus/v1" como namespace y falla con "Invalid namespace".
+const LOCATION_SERVICE_URL = import.meta.env.VITE_LOCATION_SERVICE_URL
+  || 'http://localhost:3033/urbus/v1';
 const SOCKET_URL = new URL(LOCATION_SERVICE_URL).origin;
-const CENTER_COORDS = { lat: 14.6245, lng: -90.5366 };
+const DEFAULT_DESTINATION = { lat: 14.6258, lng: -90.536 };
 
-const GPS_ERROR_MESSAGES = {
-  PERMISSION_DENIED: 'Permite el acceso a tu ubicación en el navegador para compartir la ruta. Se dejó de compartir.',
-  POSITION_UNAVAILABLE: 'No se pudo obtener tu ubicación (¿GPS desactivado o sin señal?). Se seguirá intentando.',
-  TIMEOUT: 'El GPS está tardando en responder. Se seguirá intentando.',
-  UNSUPPORTED: 'Geolocalización no soportada en este dispositivo.',
-};
+function getCurrentPosition(geolocation) {
+  return new Promise((resolve, reject) => {
+    if (!geolocation) {
+      reject(new Error('Este dispositivo no permite obtener la ubicación GPS.'));
+      return;
+    }
+    geolocation.getCurrentPosition(
+      (position) => resolve({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        timestamp: position.timestamp,
+      }),
+      (error) => reject(new Error({
+        1: 'Permite el acceso a tu ubicación GPS para iniciar el recorrido.',
+        2: 'No se pudo obtener señal GPS. Comprueba la ubicación del dispositivo.',
+        3: 'El GPS tardó demasiado en responder. Inténtalo otra vez.',
+      }[error.code] || 'No se pudo obtener la ubicación GPS.')),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+    );
+  });
+}
 
-const FRESHNESS_COLORS = {
-  live: { color: '#166534', background: '#f0fdf4', border: '#bbf7d0' },
-  stale: { color: '#92400e', background: '#fffbeb', border: '#fde68a' },
-  paused: { color: '#92400e', background: '#fffbeb', border: '#fde68a' },
-};
+async function loadSocketClient() {
+  if (window.io) return window.io;
+  await new Promise((resolve, reject) => {
+    let script = document.getElementById('socketio-js');
+    if (!script) {
+      script = document.createElement('script');
+      script.id = 'socketio-js';
+      script.src = `${SOCKET_URL}/socket.io/socket.io.js`;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('No se pudo cargar Socket.IO.'));
+      document.head.appendChild(script);
+    } else {
+      script.addEventListener('load', resolve, { once: true });
+      script.addEventListener('error', () => reject(new Error('No se pudo cargar Socket.IO.')), { once: true });
+    }
+  });
+  if (!window.io) throw new Error('Socket.IO no está disponible.');
+  return window.io;
+}
 
-// location-service solo entrega la ubicación de un conductor a él mismo y a los
-// pasajeros de sus grupos activos, y solo mientras el conductor la comparte
-// ("Iniciar Ruta"). Solo DRIVER_ROLE puede compartir su ubicación.
 export const LocationPage = () => {
   const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
   const canManageRoute = user?.role === 'DRIVER_ROLE';
-
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const busMarkerRef = useRef(null);
+  const groups = useGroupStore((state) => state.groups);
+  const fetchGroups = useGroupStore((state) => state.fetchGroups);
   const socketRef = useRef(null);
-  const sharingRef = useRef(null);
-  const hasArrivedRef = useRef(false);
-
-  const [routeActive, setRouteActive] = useState(false);
-  const [busStatus, setBusStatus] = useState('Esperando...');
+  const loadStateRef = useRef(null);
+  const [access, setAccess] = useState(null);
+  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [itinerary, setItinerary] = useState(null);
+  const [busLocation, setBusLocation] = useState(null);
   const [connected, setConnected] = useState(false);
-  // null = sin respuesta aún; { sharing, paused?, reason? } según location-service
-  const [locationStatus, setLocationStatus] = useState(null);
-  // Última posición mostrada: seenAt en el reloj local; paused = el conductor perdió la conexión
-  const [lastSeen, setLastSeen] = useState(null);
-  const [now, setNow] = useState(() => Date.now());
   const [gpsError, setGpsError] = useState(null);
-  const [lastSentAt, setLastSentAt] = useState(null);
-  const [sessionError, setSessionError] = useState(null);
+  const [requestError, setRequestError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
-  // Inicializar mapa
-  const initMap = useCallback((L) => {
-    if (!mapRef.current || mapInstanceRef.current) return;
+  const authorizedGroupIds = useMemo(() => (
+    canManageRoute ? access?.ownedGroupIds ?? [] : [access?.memberGroupId].filter(Boolean)
+  ), [access, canManageRoute]);
+  const currentItinerary = itinerary?.groupId === selectedGroupId ? itinerary : null;
+  const activeTrip = currentItinerary?.activeTrip ?? null;
+  const lastTrip = currentItinerary?.lastTrip ?? null;
+  const routeActive = activeTrip?.status === 'EN_CURSO';
+  const gpsStatus = activeTrip?.gpsStatus ?? 'DESCONECTADO';
+  const displayedLocation = routeActive
+    ? activeTrip.currentLocation
+    : lastTrip?.currentLocation ?? null;
+  const busCoords = busLocation?.groupId === selectedGroupId ? busLocation.point : null;
+  const staleLocation = !routeActive && Boolean(displayedLocation);
 
-    const map = L.map(mapRef.current).setView([CENTER_COORDS.lat, CENTER_COORDS.lng], 15);
-    mapInstanceRef.current = map;
+  const refreshGroupState = useCallback(async (groupId = selectedGroupId) => {
+    if (!groupId || !token) return;
+    const data = await getItinerary(groupId, token);
+    setItinerary(data);
+    const current = data.activeTrip?.currentLocation
+      ?? data.activeTrip?.origin
+      ?? data.lastTrip?.currentLocation
+      ?? null;
+    if (current) setBusLocation({ groupId, point: { ...current, seenAt: Date.now() } });
+  }, [selectedGroupId, token]);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
+  useEffect(() => {
+    loadStateRef.current = refreshGroupState;
+  }, [refreshGroupState]);
 
-    L.marker([CENTER_COORDS.lat, CENTER_COORDS.lng])
-      .addTo(map)
-      .bindPopup('<b>Kinal</b><br>Destino del bus');
-  }, []);
-
-  // Coloca (o mueve) el marcador del bus
-  const showBus = useCallback((coords) => {
-    const L = window.L;
-    const map = mapInstanceRef.current;
-    if (!L || !map) return null;
-
-    if (!busMarkerRef.current) {
-      const busIcon = L.divIcon({
-        html: `<div style="font-size:32px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">🚌</div>`,
-        className: '',
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
-      });
-      busMarkerRef.current = L.marker([coords.lat, coords.lng], { icon: busIcon })
-        .addTo(map)
-        .bindPopup('Bus en ruta');
-    } else {
-      busMarkerRef.current.setLatLng([coords.lat, coords.lng]);
-    }
-    return busMarkerRef.current;
-  }, []);
-
-  // Cargar Leaflet + Socket.io y conectar
   useEffect(() => {
     let mounted = true;
-    const cleanups = [];
-
-    const loadScripts = async () => {
-      // Leaflet CSS
-      if (!document.getElementById('leaflet-css')) {
-        const link = document.createElement('link');
-        link.id = 'leaflet-css';
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(link);
-      }
-
-      // Leaflet JS
-      await new Promise((resolve) => {
-        if (window.L) { resolve(); return; }
-        if (!document.getElementById('leaflet-js')) {
-          const script = document.createElement('script');
-          script.id = 'leaflet-js';
-          script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-          script.onload = resolve;
-          document.head.appendChild(script);
-        } else {
-          const iv = setInterval(() => { if (window.L) { clearInterval(iv); resolve(); } }, 50);
-        }
-      });
-
-      // Socket.io client
-      await new Promise((resolve) => {
-        if (window.io) { resolve(); return; }
-        if (!document.getElementById('socketio-js')) {
-          const script = document.createElement('script');
-          script.id = 'socketio-js';
-          script.src = `${SOCKET_URL}/socket.io/socket.io.js`;
-          script.onload = resolve;
-          script.onerror = resolve; // continúa aunque falle, mostrará desconectado
-          document.head.appendChild(script);
-        } else {
-          const iv = setInterval(() => { if (window.io) { clearInterval(iv); resolve(); } }, 50);
-        }
-      });
-
+    if (!token) return undefined;
+    getItineraryAccess(token).then((result) => {
       if (!mounted) return;
+      setAccess(result);
+      if (result.role === 'DRIVER_ROLE') {
+        fetchGroups();
+        const firstGroup = result.ownedGroupIds?.[0];
+        if (firstGroup) setSelectedGroupId((current) => current || firstGroup);
+      } else if (result.memberGroupId) {
+        setSelectedGroupId(result.memberGroupId);
+      }
+    }).catch((error) => {
+      if (mounted) setRequestError(error.message);
+    });
+    return () => { mounted = false; };
+  }, [token, fetchGroups]);
 
-      initMap(window.L);
+  useEffect(() => {
+    if (!selectedGroupId || !token) return undefined;
+    let mounted = true;
+    const timer = setTimeout(() => {
+      refreshGroupState(selectedGroupId).catch((error) => {
+        if (mounted) setRequestError(error.message);
+      });
+    }, 0);
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+    };
+  }, [refreshGroupState, selectedGroupId, token]);
 
-      // Conectar socket (autenticado: la función entrega el token vigente en cada reconexión)
-      if (window.io) {
-        const socket = window.io(SOCKET_URL, {
+  useEffect(() => {
+    if (!canManageRoute || routeActive || !navigator.geolocation) return undefined;
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => setBusLocation({
+        groupId: selectedGroupId,
+        point: {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          timestamp: position.timestamp,
+        },
+      }),
+      (error) => {
+        if (error.code === 1) setGpsError('Permite el acceso a la ubicación para mostrar el GPS actual.');
+        else setGpsError('No se pudo obtener señal GPS; el recorrido todavía no ha iniciado.');
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [canManageRoute, routeActive, selectedGroupId]);
+
+  useEffect(() => {
+    let mounted = true;
+    let recovery;
+    let socket;
+    const connect = async () => {
+      try {
+        const io = await loadSocketClient();
+        if (!mounted) return;
+        socket = io(SOCKET_URL, {
           transports: ['websocket', 'polling'],
-          auth: (cb) => cb({ token: useAuthStore.getState().token }),
+          auth: (callback) => callback({ token: useAuthStore.getState().token }),
         });
         socketRef.current = socket;
-
-        // Reconexión tras segundo plano, cortes de red o token vencido
-        const recovery = createSocketRecovery({
+        recovery = createSocketRecovery({
           socket,
           refreshToken: refreshAccessToken,
           doc: document,
           win: window,
-          onSessionExpired: () => mounted && setSessionError('Tu sesión expiró. Vuelve a iniciar sesión para seguir con la ruta.'),
+          onSessionExpired: () => setRequestError('Tu sesión expiró. Vuelve a iniciar sesión.'),
         });
-        cleanups.push(() => recovery.dispose());
-
-        if (useAuthStore.getState().user?.role === 'DRIVER_ROLE') {
-          const sharing = createLocationSharing({
-            socket,
-            geolocation: navigator.geolocation,
-            doc: document,
-            win: window,
-            wakeLock: navigator.wakeLock,
-            onChange: (state) => {
-              if (!mounted) return;
-              setRouteActive(state.active);
-              setGpsError(state.error);
-              setLastSentAt(state.lastSentAt);
-            },
-          });
-          sharingRef.current = sharing;
-          // Al cerrar la pantalla se deja de compartir (antes del disconnect, para que llegue)
-          cleanups.push(() => { sharing.dispose(); sharingRef.current = null; });
-        }
-
         socket.on('connect', () => {
           if (!mounted) return;
           setConnected(true);
-          setSessionError(null);
+          setRequestError(null);
+          const groupId = selectedGroupId;
+          if (groupId) socket.emit('itinerary:subscribe', { groupId });
         });
-        socket.on('disconnect', () => { if (mounted) setConnected(false); });
-        socket.on('connect_error', () => { if (mounted) setConnected(false); });
-
-        socket.on('locationStatus', (status) => {
-          if (!mounted) return;
-          setLocationStatus(status);
-          if (!status?.sharing) {
-            // Sin ubicación compartida: no se deja un marcador que aparente una posición en vivo
-            busMarkerRef.current?.remove();
-            busMarkerRef.current = null;
-            hasArrivedRef.current = false;
-            setLastSeen(null);
-            setBusStatus('Ubicación no compartida');
-            return;
+        socket.on('disconnect', () => mounted && setConnected(false));
+        socket.on('connect_error', (error) => {
+          if (mounted && error.message !== 'UNAUTHORIZED') setConnected(false);
+        });
+        const refreshOnEvent = (payload) => {
+          if (payload?.groupId === selectedGroupId) {
+            loadStateRef.current?.(selectedGroupId).catch((error) => setRequestError(error.message));
           }
-          if (Number.isFinite(status.lat) && Number.isFinite(status.lng)) {
-            // Última posición conocida (al conectarse tarde o si el conductor perdió la conexión)
-            showBus(status);
-            setLastSeen({ seenAt: localTimestamp(status, Date.now()), paused: Boolean(status.paused) });
+        };
+        [
+          'itinerary:state', 'itinerary:started', 'itinerary:destination',
+          'itinerary:route', 'itinerary:completed', 'itinerary:interrupted',
+        ].forEach((eventName) => socket.on(eventName, (payload) => {
+          if (eventName === 'itinerary:state' && payload?.groupId === selectedGroupId) {
+            setItinerary(payload);
           } else {
-            setLastSeen((prev) => (prev ? { ...prev, paused: Boolean(status.paused) } : prev));
+            refreshOnEvent(payload);
+          }
+        }));
+        socket.on('itinerary:location', (payload) => {
+          if (payload?.groupId === selectedGroupId && payload.location) {
+            setBusLocation({
+              groupId: selectedGroupId,
+              point: {
+                ...payload.location,
+                updatedAt: payload.updatedAt,
+                seenAt: Date.now(),
+              },
+            });
           }
         });
-
-        socket.on('updateBus', (coords) => {
-          if (!mounted) return;
-          if (!showBus(coords)) return;
-
-          setBusStatus('En ruta 🚌');
-          setLocationStatus({ sharing: true });
-          setLastSeen({ seenAt: Date.now(), paused: false });
-
-          // Verificar llegada
-          const R = 6371000;
-          const dLat = (coords.lat - CENTER_COORDS.lat) * Math.PI / 180;
-          const dLng = (coords.lng - CENTER_COORDS.lng) * Math.PI / 180;
-          const a = Math.sin(dLat / 2) ** 2 +
-            Math.cos(CENTER_COORDS.lat * Math.PI / 180) *
-            Math.cos(coords.lat * Math.PI / 180) *
-            Math.sin(dLng / 2) ** 2;
-          const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-          if (!hasArrivedRef.current && distance <= 50) {
-            hasArrivedRef.current = true;
-            busMarkerRef.current.setPopupContent('¡Llegó a Kinal! 🎉').openPopup();
-            setBusStatus('¡Llegó a Kinal! 🎉');
-            toast.success('¡El bus llegó a Kinal! 🚌', { duration: 5000 });
+        socket.on('itinerary:gps-status', (payload) => {
+          if (payload?.groupId === selectedGroupId) {
+            const seenAt = Date.now();
+            setItinerary((current) => current?.activeTrip ? {
+              ...current,
+              activeTrip: {
+                ...current.activeTrip,
+                gpsStatus: payload.status,
+                lastLocationAt: payload.updatedAt ?? current.activeTrip.lastLocationAt,
+                locationAgeMs: payload.status === 'CONECTADO' ? 0 : current.activeTrip.locationAgeMs,
+              },
+            } : current);
+            if (payload.status === 'CONECTADO') {
+              setBusLocation((current) => current?.groupId === selectedGroupId
+                ? { ...current, point: { ...current.point, seenAt } }
+                : current);
+            }
           }
         });
-
-        socket.on('busArrived', () => {
-          if (mounted) {
-            setBusStatus('¡Llegó a Kinal! 🎉');
-            toast.success('¡El bus llegó a Kinal! 🚌', { duration: 5000 });
-          }
+        socket.on('itinerary:error', (payload) => {
+          if (payload?.groupId === selectedGroupId) setRequestError(payload.message);
         });
+      } catch (error) {
+        if (mounted) setRequestError(error.message);
       }
     };
-
-    loadScripts();
-
+    connect();
     return () => {
       mounted = false;
-      while (cleanups.length) cleanups.pop()();
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-      busMarkerRef.current = null;
+      recovery?.dispose();
+      socket?.disconnect();
+      socketRef.current = null;
     };
-  }, [initMap, showBus]);
+  }, [selectedGroupId]);
 
-  // Refresca el "hace X" mientras hay una posición en pantalla (solo re-renderiza, no consulta al servidor)
-  const hasTimestamps = Boolean(lastSeen || lastSentAt);
   useEffect(() => {
-    if (!hasTimestamps) return undefined;
-    const id = setInterval(() => setNow(Date.now()), 5000);
-    return () => clearInterval(id);
-  }, [hasTimestamps]);
+    if (!routeActive || !canManageRoute || !selectedGroupId) return undefined;
+    if (!navigator.geolocation) return undefined;
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const point = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          timestamp: position.timestamp,
+        };
+        setBusLocation({ groupId: selectedGroupId, point: { ...point, seenAt: Date.now() } });
+        if (socketRef.current?.connected) {
+          socketRef.current.volatile.emit('itinerary:location', { groupId: selectedGroupId, point });
+        }
+      },
+      (error) => setGpsError(error.code === 1
+        ? 'Se revocó el permiso GPS. El recorrido sigue guardado, pero no se reciben ubicaciones.'
+        : 'No se recibe señal GPS; se reintentará automáticamente.'),
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 },
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [canManageRoute, routeActive, selectedGroupId]);
 
-  const freshness = lastSeen ? describeFreshness(lastSeen, now) : null;
-  const freshnessState = freshness?.state;
-
-  // Una posición vieja nunca se ve igual que una en vivo
   useEffect(() => {
-    busMarkerRef.current?.setOpacity(!freshnessState || freshnessState === 'live' ? 1 : 0.45);
-  }, [freshnessState]);
+    const interval = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(interval);
+  }, []);
 
-  const handleStartRoute = () => {
-    if (!sharingRef.current) return;
-    hasArrivedRef.current = false;
-    setBusStatus('En ruta 🚌');
-    sharingRef.current.start();
-  };
-
-  const handleEndRoute = () => {
-    // También termina una ruta que quedó en pausa en el servidor (p. ej. tras recargar la página)
-    sharingRef.current?.stop();
-    setBusStatus('Ruta finalizada');
-    hasArrivedRef.current = false;
-  };
-
-  // El servidor conserva en pausa la ruta del conductor si la página se recargó o perdió la conexión
-  const pausedRouteToResume = canManageRoute && !routeActive && Boolean(locationStatus?.sharing && locationStatus?.paused);
-  const canEndRoute = routeActive || pausedRouteToResume;
-
-  const statusColor = connected ? '#16a34a' : '#9ca3af';
-  const statusLabel = connected
-    ? (routeActive || locationStatus?.sharing ? busStatus : 'Conectado')
-    : 'Desconectado';
-
-  // Aviso sobre el mapa para quien solo observa
-  let viewerNotice = null;
-  if (!canManageRoute && connected && locationStatus) {
-    if (locationStatus.reason === 'NO_GROUP') {
-      viewerNotice = user?.role === 'ADMIN_ROLE'
-        ? 'La ubicación del bus solo la ven el conductor y los pasajeros de su grupo.'
-        : 'Únete a un grupo con el código de tu conductor para ver la ubicación del bus.';
-    } else if (!locationStatus.sharing) {
-      viewerNotice = 'Tu conductor no está compartiendo su ubicación en este momento.';
+  const handleStart = async () => {
+    if (!selectedGroupId || busy) return;
+    setBusy(true);
+    setGpsError(null);
+    try {
+      const origin = await getCurrentPosition(navigator.geolocation);
+      const trip = await startGroupTrip(selectedGroupId, token, origin);
+      setItinerary((current) => ({
+        ...(current?.groupId === selectedGroupId ? current : { groupId: selectedGroupId }),
+        activeTrip: trip,
+        destination: trip.destination,
+      }));
+      setBusLocation({ groupId: selectedGroupId, point: { ...origin, seenAt: Date.now() } });
+      toast.success('Recorrido iniciado. El grupo ya puede seguir el bus.');
+      await refreshGroupState(selectedGroupId);
+    } catch (error) {
+      setGpsError(error.message);
+      toast.error(error.message);
+    } finally {
+      setBusy(false);
     }
-  }
+  };
+
+  const handleInterrupt = async () => {
+    if (!selectedGroupId || busy) return;
+    setBusy(true);
+    try {
+      await interruptGroupTrip(selectedGroupId, token);
+      setItinerary((current) => current?.groupId === selectedGroupId && current.activeTrip ? {
+        ...current,
+        activeTrip: null,
+        lastTrip: { ...current.activeTrip, status: 'INTERRUMPIDO', endedAt: new Date().toISOString() },
+      } : current);
+      toast.success('Recorrido interrumpido.');
+      await refreshGroupState(selectedGroupId);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDestinationChange = async (destination) => {
+    if (!canManageRoute || !selectedGroupId) return;
+    try {
+      const result = await updateGroupDestination(selectedGroupId, token, destination);
+      setItinerary((current) => ({
+        ...(current?.groupId === selectedGroupId ? current : { groupId: selectedGroupId }),
+        destination: result.destination,
+        activeTrip: result.activeTrip ?? current?.activeTrip ?? null,
+      }));
+      toast.success('Destino del grupo actualizado.');
+    } catch (error) {
+      toast.error(error.message);
+      await refreshGroupState(selectedGroupId);
+    }
+  };
+
+  const destination = currentItinerary?.destination ?? DEFAULT_DESTINATION;
+  const lastLocationAge = (busCoords?.seenAt
+    ? Math.max(0, now - busCoords.seenAt)
+    : routeActive ? activeTrip?.locationAgeMs : lastTrip?.locationAgeMs) ?? (
+    busCoords?.updatedAt || displayedLocation?.updatedAt
+    ? Math.max(0, now - new Date(busCoords?.updatedAt ?? displayedLocation.updatedAt).getTime())
+    : displayedLocation?.timestamp
+      ? Math.max(0, now - displayedLocation.timestamp)
+      : null);
+  const tripStatus = routeActive
+    ? gpsStatus === 'CONECTADO' ? 'Recorrido en curso · GPS conectado' : 'Recorrido en curso · GPS desconectado'
+    : lastTrip?.status === 'COMPLETADO'
+      ? 'Recorrido completado'
+      : lastTrip?.status === 'INTERRUMPIDO'
+        ? 'Último recorrido interrumpido'
+        : 'El bus todavía no ha comenzado';
 
   return (
     <div style={styles.wrapper}>
@@ -318,101 +374,101 @@ export const LocationPage = () => {
           </div>
           <div>
             <h1 style={styles.pageTitle}>Mapa a Tiempo Real</h1>
-            <p style={styles.pageSubtitle}>
-              {canManageRoute
-                ? (routeActive
-                    ? 'Compartiendo tu ubicación con los pasajeros de tus grupos'
-                    : 'Inicia la ruta para compartir tu ubicación con tus grupos')
-                : 'Sigue la ubicación del bus en tiempo real'}
-            </p>
+            <p style={styles.pageSubtitle}>{tripStatus}</p>
           </div>
         </div>
-
-        <div style={{ ...styles.statusBadge, color: statusColor, background: connected ? '#f0fdf4' : '#f3f4f6' }}>
-          <span style={{ ...styles.statusDot, background: statusColor }} />
-          {statusLabel}
+        <div style={{
+          ...styles.statusBadge,
+          color: connected ? '#166534' : '#9ca3af',
+          background: connected ? '#f0fdf4' : '#f3f4f6',
+        }}>
+          <span style={{ ...styles.statusDot, background: connected ? '#16a34a' : '#9ca3af' }} />
+          {connected ? 'Conectado' : 'Desconectado'}
         </div>
       </div>
 
       <div style={styles.mapCard}>
-        <div style={styles.mapCardHeader}>
-          <div style={styles.mapCardHeaderLeft}>
-            <svg width="16" height="16" fill="none" stroke="#6b7280" strokeWidth="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12,6 12,12 16,14" />
-            </svg>
-            <span style={styles.mapCardHeaderText}>Actualización en tiempo real</span>
-          </div>
+        <div style={{ ...styles.mapCardHeader, justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <span style={styles.mapCardHeaderText}>Ruta independiente por grupo · sin horarios programados</span>
+          {canManageRoute && authorizedGroupIds.length > 1 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+              Grupo
+              <select
+                value={selectedGroupId}
+                onChange={(event) => setSelectedGroupId(event.target.value)}
+                disabled={routeActive}
+                aria-label="Seleccionar grupo"
+              >
+                {authorizedGroupIds.map((id) => (
+                  <option value={id} key={id}>
+                    {groups.find((group) => String(group._id) === id)?.name || id}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
-        {freshness && (
+        {(requestError || gpsError) && (
+          <div role="alert" style={{
+            padding: '10px 16px', background: '#fef2f2', color: '#b91c1c',
+            borderBottom: '1px solid #fecaca', fontSize: 13, fontWeight: 600,
+          }}>
+            {gpsError || requestError}
+          </div>
+        )}
+
+        {lastLocationAge !== null && (
           <div style={{
             padding: '8px 16px', fontSize: 13, fontWeight: 600,
-            color: FRESHNESS_COLORS[freshness.state].color,
-            background: FRESHNESS_COLORS[freshness.state].background,
-            borderBottom: `1px solid ${FRESHNESS_COLORS[freshness.state].border}`,
+            color: staleLocation ? '#92400e' : '#166534',
+            background: staleLocation ? '#fffbeb' : '#f0fdf4',
+            borderBottom: '1px solid #e5e7eb',
           }}>
-            {freshness.label}
+            {staleLocation
+              ? `Última ubicación conocida · ${formatAge(lastLocationAge)}`
+              : gpsStatus === 'CONECTADO'
+                ? `GPS actualizado hace ${formatAge(lastLocationAge)}`
+                : 'Se perdió la señal GPS; la posición mostrada no es actual.'}
           </div>
         )}
 
-        {canManageRoute && (sessionError || gpsError || pausedRouteToResume || routeActive) && (
-          <div style={{
-            padding: '10px 16px', fontSize: 13, fontWeight: 600, borderBottom: '1px solid #fde68a',
-            background: sessionError || gpsError ? '#fef2f2' : '#fffbeb',
-            color: sessionError || gpsError ? '#b91c1c' : '#92400e',
-          }}>
-            {sessionError
-              || GPS_ERROR_MESSAGES[gpsError]
-              || (pausedRouteToResume
-                ? 'Tu ruta quedó en pausa (se recargó la página o se perdió la conexión). Pulsa Iniciar Ruta para reanudarla o Finalizar Ruta para terminarla.'
-                : `Mantén esta pestaña abierta y visible: al cambiar de app o bloquear la pantalla el navegador pausa el envío y se reanuda al volver.${
-                  lastSentAt ? ` Última posición enviada ${formatAge(now - lastSentAt)}.` : ''}`)}
+        <div className="urbus-map-stage">
+          <LocationMap
+            vehicle={busCoords ?? displayedLocation}
+            vehicleOpacity={staleLocation || gpsStatus === 'DESCONECTADO' ? 0.45 : 1}
+            origin={routeActive ? activeTrip.origin : null}
+            destination={destination}
+            routeGeometry={routeActive ? activeTrip.geometry : null}
+            canEditDestination={canManageRoute}
+            onDestinationChange={handleDestinationChange}
+          />
+          <div className="urbus-map-tools">
+            <span className="urbus-route-summary" role="status">
+              {routeActive
+                ? `${(activeTrip.distance / 1000).toFixed(1)} km · ${Math.max(1, Math.round(activeTrip.duration / 60))} min`
+                : canManageRoute
+                  ? 'Arrastra el marcador rojo para configurar el destino del grupo.'
+                  : 'El destino configurado para este grupo aparece en el mapa.'}
+            </span>
           </div>
-        )}
-
-        {viewerNotice && (
-          <div style={{
-            padding: '10px 16px', background: '#fffbeb', color: '#92400e',
-            fontSize: 13, fontWeight: 600, borderBottom: '1px solid #fde68a',
-          }}>
-            {viewerNotice}
-          </div>
-        )}
-
-        <div ref={mapRef} style={styles.mapContainer} />
+        </div>
 
         {canManageRoute && (
           <div style={styles.adminActions}>
             <button
-              style={{
-                ...styles.actionBtn,
-                ...styles.startBtn,
-                opacity: routeActive ? 0.5 : 1,
-                cursor: routeActive ? 'not-allowed' : 'pointer',
-              }}
-              onClick={handleStartRoute}
-              disabled={routeActive}
+              style={{ ...styles.actionBtn, ...styles.startBtn, opacity: routeActive || busy ? 0.5 : 1 }}
+              onClick={handleStart}
+              disabled={routeActive || busy || !selectedGroupId}
             >
-              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <polygon points="5,3 19,12 5,21" />
-              </svg>
-              Iniciar Ruta
+              Iniciar recorrido
             </button>
             <button
-              style={{
-                ...styles.actionBtn,
-                ...styles.endBtn,
-                opacity: !canEndRoute ? 0.5 : 1,
-                cursor: !canEndRoute ? 'not-allowed' : 'pointer',
-              }}
-              onClick={handleEndRoute}
-              disabled={!canEndRoute}
+              style={{ ...styles.actionBtn, ...styles.endBtn, opacity: !routeActive || busy ? 0.5 : 1 }}
+              onClick={handleInterrupt}
+              disabled={!routeActive || busy}
             >
-              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-              </svg>
-              Finalizar Ruta
+              Interrumpir recorrido
             </button>
           </div>
         )}

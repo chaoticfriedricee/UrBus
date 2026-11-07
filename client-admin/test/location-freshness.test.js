@@ -44,9 +44,11 @@ test('formatAge', () => {
   assert.equal(formatAge(2 * 3_600_000), 'hace 2 h');
 });
 
-test('shouldSendFix descarta posiciones viejas, repetidas o demasiado seguidas', () => {
+test('shouldSendFix descarta posiciones viejas, imprecisas, repetidas o demasiado seguidas', () => {
+  assert.equal(shouldSendFix({ timestamp: NOW, accuracy: 12 }, null, NOW), true);
   assert.equal(shouldSendFix({ timestamp: NOW }, null, NOW), true);
   assert.equal(shouldSendFix({ timestamp: NOW - MAX_FIX_AGE_MS - 1 }, null, NOW), false);
+  assert.equal(shouldSendFix({ timestamp: NOW, accuracy: 200 }, null, NOW), false);
   assert.equal(shouldSendFix({}, null, NOW), false);
   const last = { timestamp: NOW };
   assert.equal(shouldSendFix({ timestamp: NOW }, last, NOW), false);
