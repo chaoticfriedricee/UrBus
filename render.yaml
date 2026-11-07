@@ -13,60 +13,71 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
-      - key: ConnectionStrings__DefaultConnection
+      - key: NODE_ENV
+        value: production
+      - key: DB_HOST
         fromDatabase:
           name: urbus-postgres
-          property: connectionString
-      - key: CloudinarySettings__CloudName
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: urbus-postgres
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: urbus-postgres
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: urbus-postgres
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: urbus-postgres
+          property: password
+      - key: DB_SSL
+        value: "true"
+      - key: JWT_SECRET
         sync: false
-      - key: CloudinarySettings__ApiKey
-        sync: false
-      - key: CloudinarySettings__ApiSecret
-        sync: false
-      - key: CloudinarySettings__BaseUrl
-        sync: false
-      - key: CloudinarySettings__Folder
-        sync: false
-      - key: CloudinarySettings__DefaultAvatarPath
-        sync: false
-      - key: SmtpSettings__Host
-        sync: false
-      - key: SmtpSettings__Port
-        sync: false
-      - key: SmtpSettings__Username
-        sync: false
-      - key: SmtpSettings__Password
-        sync: false
-      - key: SmtpSettings__FromEmail
-        sync: false
-      - key: SmtpSettings__FromName
-        sync: false
-      - key: AppSettings__FrontendUrl
-        sync: false
-      - key: JwtSettings__SecretKey
-        sync: false
-      - key: JwtSettings__Issuer
+      - key: JWT_ISSUER
         value: UrBus
-      - key: JwtSettings__Audience
+      - key: JWT_AUDIENCE
         value: UrBus
-      - key: JwtSettings__ExpirationMinutes
+      - key: JWT_EXPIRATION_MINUTES
         value: "60"
-      - key: Security__AllowedOrigins__0
+      - key: FRONTEND_URL
         sync: false
-      - key: Security__AdminAllowedOrigins__0
+      - key: ALLOWED_ORIGINS
         sync: false
-
-  - type: web
-    name: urbus-location-service
-    runtime: docker
-    dockerfilePath: ./dockerfiles/Dockerfile.location-service
-    dockerContext: ./location-service
-    plan: free
-    healthCheckPath: /urbus/v1/health
-    envVars:
-      - key: URI_MONGODB
+      - key: ADMIN_ALLOWED_ORIGINS
         sync: false
-      - key: PASSENGER_SERVICE_URL
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_BASE_URL
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        sync: false
+      - key: CLOUDINARY_DEFAULT_AVATAR
+        sync: false
+      - key: SMTP_ENABLED
+        value: "true"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USE_IMPLICIT_SSL
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
+      - key: SMTP_FROM_NAME
         sync: false
 
   - type: web
@@ -116,17 +127,14 @@ services:
         sync: false
 
   - type: web
-    name: urbus-client-admin
+    name: urbus-location-service
     runtime: docker
-    dockerfilePath: ./dockerfiles/Dockerfile.client-admin
-    dockerContext: .
+    dockerfilePath: ./dockerfiles/Dockerfile.location-service
+    dockerContext: ./location-service
     plan: free
+    healthCheckPath: /urbus/v1/health
     envVars:
-      - key: VITE_LOCATION_SERVICE_URL
+      - key: URI_MONGODB
         sync: false
-      - key: VITE_AUTH_URL
-        sync: false
-      - key: VITE_POST_URL
-        sync: false
-      - key: VITE_PASSENGER_URL
+      - key: PASSENGER_SERVICE_URL
         sync: false
