@@ -1,8 +1,3 @@
-// src/features/passengers/components/PassengerListItem.jsx
-// Fila de la lista de pasajeros — replica el diseño del mockup "Lista de Pasajeros" con las
-// mismas acciones que client-admin (features/passangers/components/PassengerCard.jsx):
-// - ADMIN y DRIVER: asistencia, motivo de ausencia (registrar / quitar) e info de contacto.
-// - Solo ADMIN: editar el nombre y eliminar.
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -36,7 +31,7 @@ export default function PassengerListItem({
   onToggle, onAbsenceReason, onClearAbsenceReason, onInfo, onEdit, onDelete,
 }) {
   const isPresent = passenger.status === 'PRESENT';
-  // El motivo de ausencia solo se muestra si se registró hoy (horario de Guatemala)
+
   const showAbsenceReason = !isPresent && passenger.absenceReason && isTodayGT(passenger.absenceReasonAt);
   const reasonLabel = ABSENCE_REASON_LABELS[passenger.absenceReason] ?? passenger.absenceReason;
 
@@ -56,7 +51,7 @@ export default function PassengerListItem({
               </Text>
               {canManage ? (
                 <TouchableOpacity onPress={() => onClearAbsenceReason(passenger)} hitSlop={8} accessibilityLabel="Quitar motivo de ausencia">
-                  <MaterialIcons name="close" size={14} color="#b45309" />
+                  <MaterialIcons name="close" size={14} color={COLORS.warning} />
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -85,13 +80,13 @@ const styles = StyleSheet.create({
   row: { paddingVertical: 14, paddingHorizontal: 18, backgroundColor: COLORS.surface },
   top: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   info: { flex: 1, minWidth: 0 },
-  name: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
+  name: { fontSize: FONT_SIZE.md, fontWeight: '800', color: COLORS.text },
   address: { fontSize: 12.5, color: COLORS.textMuted, marginTop: 2 },
   reasonRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  reason: { flexShrink: 1, fontSize: FONT_SIZE.xs, fontWeight: '700', color: '#b45309' },
+  reason: { flexShrink: 1, fontSize: FONT_SIZE.xs, fontWeight: '800', color: COLORS.warning },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SPACING.sm, paddingLeft: 48 + SPACING.md },
-  reasonBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.sm, borderWidth: 1.5, borderColor: COLORS.border },
-  reasonBtnText: { fontSize: FONT_SIZE.xs, fontWeight: '600', color: COLORS.text },
+  reasonBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.sm, borderWidth: 1.5, borderColor: COLORS.borderStrong, backgroundColor: COLORS.surface },
+  reasonBtnText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.text },
   iconRow: { flexDirection: 'row', gap: 6 },
   iconBtn: { width: 32, height: 32, borderRadius: RADIUS.sm, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
 });

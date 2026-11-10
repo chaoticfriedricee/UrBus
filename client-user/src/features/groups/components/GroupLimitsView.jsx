@@ -1,8 +1,3 @@
-// src/features/groups/components/GroupLimitsView.jsx
-// Límites de grupos (solo ADMIN) — portado de client-admin (DefaultLimitCard + DriverLimitCard):
-// - Límite general: máximo de grupos activos de cada conductor sin límite propio (2 por defecto).
-// - Por conductor: un límite propio, o "Usar general" para quitarlo.
-// Bajar un límite no elimina grupos: solo impide crear o reactivar más.
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, TextInput, FlatList, RefreshControl, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -10,7 +5,7 @@ import { getAllUsers } from '../../../shared/api/userApi';
 import {
   getGroupSettings, updateGroupSettings, getGroupLimit, setGroupLimit, resetGroupLimit,
 } from '../../../shared/api/groupApi';
-import { Card, EmptyState, LoadingSpinner } from '../../../shared/components/common/Common';
+import { Card, EmptyState, LoadingSpinner, DashedDivider } from '../../../shared/components/common/Common';
 import { COLORS, SPACING, FONT_SIZE, RADIUS, ROLES } from '../../../shared/constants/theme';
 
 const MAX_LIMIT = 100;
@@ -21,7 +16,6 @@ const parseLimit = (text) => {
   return text.trim() !== '' && Number.isInteger(value) && value >= 0 && value <= MAX_LIMIT ? value : null;
 };
 
-// Valor editable en línea: muestra "N grupos" y, al tocarlo, un campo numérico con Guardar/Cancelar
 function LimitEditor({ value, onSave, highlight }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
@@ -85,7 +79,7 @@ function LimitEditor({ value, onSave, highlight }) {
 export default function GroupLimitsView({ onNotice }) {
   const [defaultLimit, setDefaultLimit] = useState(null);
   const [drivers, setDrivers] = useState([]);
-  // driverId -> { maxGroups, isCustom, activeGroups }
+
   const [limits, setLimits] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -128,7 +122,7 @@ export default function GroupLimitsView({ onNotice }) {
     try {
       await updateGroupSettings({ maxGroupsPerDriver });
       setDefaultLimit(maxGroupsPerDriver);
-      // Los conductores sin límite propio pasan a usar el nuevo valor
+
       setLimits((prev) => Object.fromEntries(Object.entries(prev).map(([id, l]) => [
         id, l && !l.isCustom ? { ...l, maxGroups: maxGroupsPerDriver } : l,
       ])));
@@ -182,7 +176,7 @@ export default function GroupLimitsView({ onNotice }) {
             <LimitEditor value={defaultLimit} onSave={saveDefault} highlight />
           </View>
         }
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={() => <DashedDivider />}
         ListEmptyComponent={<EmptyState icon="person-off" message={error ?? 'No hay conductores registrados'} />}
         renderItem={({ item }) => {
           const limit = limits[item.id];
@@ -216,9 +210,9 @@ const styles = StyleSheet.create({
   separator: { height: 1, backgroundColor: COLORS.border, marginHorizontal: 18 },
   defaultCard: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, padding: 18,
-    backgroundColor: '#f0f7ff', borderBottomWidth: 1, borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.accentSoft, borderBottomWidth: 1.5, borderBottomColor: COLORS.borderStrong,
   },
-  defaultTitle: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
+  defaultTitle: { fontSize: FONT_SIZE.md, fontWeight: '800', color: COLORS.text },
   defaultHint: { fontSize: FONT_SIZE.xs, color: COLORS.textLight, marginTop: 2 },
   driverRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: 18, paddingVertical: 14 },
   driverName: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
@@ -226,7 +220,7 @@ const styles = StyleSheet.create({
   resetText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.primary, marginTop: 4 },
   valueBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: RADIUS.pill, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: '#f9fafb',
+    borderRadius: RADIUS.pill, borderWidth: 1.5, borderColor: COLORS.borderStrong, backgroundColor: COLORS.surface,
   },
   valueBtnHighlight: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   valueText: { fontSize: FONT_SIZE.sm, fontWeight: '700', color: COLORS.text },

@@ -135,6 +135,9 @@ importers:
 
   client-user:
     dependencies:
+      '@expo-google-fonts/bricolage-grotesque':
+        specifier: ^0.4.1
+        version: 0.4.1
       '@expo/vector-icons':
         specifier: ^15.0.2
         version: 15.1.1(expo-font@55.0.8(expo@55.0.32)(react-native@0.83.10(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0))(react-native@0.83.10(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0)
@@ -156,6 +159,9 @@ importers:
       expo:
         specifier: ~55.0.32
         version: 55.0.32(@babel/core@7.29.7)(@expo/dom-webview@55.0.6)(react-dom@19.2.0(react@19.2.0))(react-native-webview@13.16.0(react-native@0.83.10(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0))(react-native@0.83.10(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
+      expo-font:
+        specifier: ~55.0.0
+        version: 55.0.8(expo@55.0.32)(react-native@0.83.10(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0)
       expo-image-picker:
         specifier: ~55.0.24
         version: 55.0.24(expo@55.0.32)
@@ -1081,6 +1087,9 @@ packages:
   '@eslint/plugin-kit@0.7.2':
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
+
+  '@expo-google-fonts/bricolage-grotesque@0.4.1':
+    resolution: {integrity: sha512-uijLLg+thOrFgw+gXtYA3dQJTBqqqleabcNFpamaYXqUUcbFe0J18C+4nfL0CyGzSJUicxUBLY4Zv7jdHmTGMA==}
 
   '@expo/cli@55.0.37':
     resolution: {integrity: sha512-ennGX6iY1Ba/88cKWomD7xCIPEY0FDU14zAHyFpQTQV+9vg32i45sCRzOWUqkDXuZq4QzzznNqq87eFnlKfh/A==}
@@ -6394,6 +6403,8 @@ snapshots:
     dependencies:
       '@eslint/core': 1.2.1
       levn: 0.4.1
+
+  '@expo-google-fonts/bricolage-grotesque@0.4.1': {}
 
   '@expo/cli@55.0.37(@expo/dom-webview@55.0.6)(expo-constants@55.0.17(expo@55.0.32)(react-native@0.83.10(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0)))(expo-font@55.0.8(expo@55.0.32)(react-native@0.83.10(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0))(expo@55.0.32)(react-dom@19.2.0(react@19.2.0))(react-native@0.83.10(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.0))(react@19.2.0)(typescript@5.9.3)':
     dependencies:

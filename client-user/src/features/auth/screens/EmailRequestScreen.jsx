@@ -1,15 +1,12 @@
-// src/features/auth/screens/EmailRequestScreen.jsx
-// "¿Olvidaste tu contraseña?" y "¿No verificaste tu correo?" — portados de client-admin
-// (features/auth/components/ForgotPassword.jsx y ResendVerification.jsx). El enlace del
-// correo abre la página web de UrBus (restablecer contraseña / verificar correo).
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import authClient from '../../../shared/api/authClient';
+import AuthBackdrop from '../components/AuthBackdrop';
 import Input from '../../../shared/components/common/Input';
 import Button from '../../../shared/components/common/Button';
-import { COLORS, SPACING, FONT_SIZE } from '../../../shared/constants/theme';
+import { DashedDivider } from '../../../shared/components/common/Common';
+import { COLORS, SPACING, FONT_SIZE, FONTS } from '../../../shared/constants/theme';
 
 const MODES = {
   forgot: {
@@ -18,7 +15,7 @@ const MODES = {
     action: 'Enviar enlace',
     sent: 'Si el correo existe, recibirás las instrucciones en unos minutos. Revisa también la carpeta de spam.',
     request: (email) => authClient.post('/auth/forgot-password', { email }),
-    // El servicio responde lo mismo exista o no la cuenta (no revela qué correos están registrados)
+
     isSuccess: () => true,
     fallbackError: 'Error al enviar el correo de recuperación.',
   },
@@ -28,7 +25,7 @@ const MODES = {
     action: 'Reenviar verificación',
     sent: 'Correo de verificación enviado. Abre el enlace para activar tu cuenta y luego inicia sesión.',
     request: (email) => authClient.post('/auth/resend-verification', { email }),
-    // Responde 200 con success:false si la cuenta no existe o ya está verificada
+
     isSuccess: (data) => Boolean(data?.success),
     fallbackError: 'No se pudo reenviar la verificación.',
   },
@@ -61,47 +58,48 @@ export default function EmailRequestScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.screen}>
-      <LinearGradient colors={['#eaf5fc', '#f7fbfe']} style={StyleSheet.absoluteFill} />
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>{mode.title}</Text>
+    <AuthBackdrop>
+      <Text style={styles.title}>{mode.title}</Text>
 
-        {sent ? (
-          <View style={styles.sentBox}>
-            <MaterialIcons name="mark-email-read" size={40} color={COLORS.success} />
-            <Text style={styles.sentText}>{mode.sent}</Text>
+      {sent ? (
+        <View style={styles.sentBox}>
+          <View style={styles.sentMark}>
+            <MaterialIcons name="mark-email-read" size={30} color={COLORS.success} />
           </View>
-        ) : (
-          <>
-            <Text style={styles.description}>{mode.description}</Text>
-            <Input
-              icon="email"
-              placeholder="correo@ejemplo.com"
-              value={email}
-              onChangeText={(text) => { setEmail(text); setError(null); }}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              onSubmitEditing={handleSubmit}
-            />
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            <Button title={mode.action} onPress={handleSubmit} loading={loading} />
-          </>
-        )}
+          <Text style={styles.sentText}>{mode.sent}</Text>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.description}>{mode.description}</Text>
+          <Input
+            label="Correo electrónico"
+            icon="mail-outline"
+            placeholder="correo@ejemplo.com"
+            value={email}
+            onChangeText={(text) => { setEmail(text); setError(null); }}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            onSubmitEditing={handleSubmit}
+          />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <Button title={mode.action} onPress={handleSubmit} loading={loading} />
+        </>
+      )}
 
-        <Text style={styles.backLink} onPress={() => navigation.goBack()}>Volver al inicio de sesión</Text>
-      </ScrollView>
-    </View>
+      <DashedDivider style={styles.divider} />
+      <Text style={styles.backLink} onPress={() => navigation.goBack()}>Volver al inicio de sesión</Text>
+    </AuthBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#eaf5fc' },
-  container: { flexGrow: 1, padding: SPACING.lg, justifyContent: 'center' },
-  title: { fontSize: 28, fontWeight: '800', color: COLORS.text, marginBottom: SPACING.sm },
-  description: { fontSize: FONT_SIZE.sm, color: COLORS.textLight, marginBottom: SPACING.lg, lineHeight: 20 },
-  error: { color: COLORS.error, fontSize: FONT_SIZE.sm, textAlign: 'center', marginBottom: SPACING.sm },
-  sentBox: { alignItems: 'center', gap: SPACING.sm, paddingVertical: SPACING.lg },
-  sentText: { fontSize: FONT_SIZE.md, color: COLORS.text, textAlign: 'center', lineHeight: 22 },
-  backLink: { color: COLORS.primary, fontWeight: '700', fontSize: FONT_SIZE.sm, textAlign: 'center', marginTop: SPACING.lg },
+  title: { fontFamily: FONTS.display, fontSize: 26, lineHeight: 30, color: COLORS.text, marginBottom: SPACING.sm },
+  description: { fontSize: FONT_SIZE.sm, color: COLORS.textMuted, marginBottom: SPACING.lg, lineHeight: 20 },
+  error: { color: COLORS.error, fontSize: 13, fontWeight: '700', marginBottom: SPACING.sm },
+  sentBox: { gap: SPACING.md, paddingVertical: SPACING.sm },
+  sentMark: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.successSoft, alignItems: 'center', justifyContent: 'center' },
+  sentText: { fontSize: FONT_SIZE.sm, color: COLORS.text, lineHeight: 21 },
+  divider: { marginHorizontal: 0, marginVertical: SPACING.lg },
+  backLink: { color: COLORS.primary, fontWeight: '800', fontSize: FONT_SIZE.sm },
 });

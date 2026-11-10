@@ -17,6 +17,7 @@
     "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
+    "@expo-google-fonts/bricolage-grotesque": "^0.4.1",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.3.10",
@@ -24,6 +25,7 @@
     "@react-navigation/native-stack": "^7.3.10",
     "axios": "^1.7.9",
     "expo": "~55.0.32",
+    "expo-font": "~55.0.0",
     "expo-image-picker": "~55.0.24",
     "expo-linear-gradient": "~55.0.18",
     "expo-location": "~55.1.15",

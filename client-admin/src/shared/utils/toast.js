@@ -1,55 +1,32 @@
 import toast from 'react-hot-toast';
 
 const baseStyle = {
-  borderRadius: '8px',
+  borderRadius: '10px',
   fontWeight: 600,
   fontFamily: 'inherit',
-  fontSize: '1rem',
-  padding: '16px 24px',
-  boxShadow: '0 2px 16px 0 rgba(0, 0, 0, 0.08)',
+  fontSize: '0.95rem',
+  padding: '12px 16px',
+  color: '#1d2733',
+  boxShadow: '3px 3px 0 #1d2733',
 };
 
 export const showSuccess = (message) => {
   toast.success(message, {
-    style: {
-      ...baseStyle,
-      background: 'linear-gradient(90deg, #22c55e 0%, #16a34a 100%)',
-      color: '#fff',
-      border: '2px solid #22c55e',
-    },
-    iconTheme: {
-      primary: '#22c55e',
-      secondary: '#fff',
-    },
+    style: { ...baseStyle, background: '#dcefe3', border: '1.5px solid #1d2733' },
+    iconTheme: { primary: '#2c7a4f', secondary: '#fff' },
   });
 };
 
 export const showError = (message) => {
   toast.error(message, {
-    style: {
-      ...baseStyle,
-      background: 'linear-gradient(90deg, #ef4444 0%, #b91c1c 100%)',
-      color: '#fff',
-      border: '2px solid #ef4444',
-    },
-    iconTheme: {
-      primary: '#ef4444',
-      secondary: '#fff',
-    },
+    style: { ...baseStyle, background: '#fadfda', border: '1.5px solid #1d2733' },
+    iconTheme: { primary: '#b83a2d', secondary: '#fff' },
   });
 };
 
 export const showInfo = (message) => {
   toast(message, {
-    style: {
-      ...baseStyle,
-      background: 'linear-gradient(90deg, #0ea5e9 0%, #0369a1 100%)',
-      color: '#fff',
-      border: '2px solid #0ea5e9',
-    },
-    iconTheme: {
-      primary: '#0ea5e9',
-      secondary: '#fff',
-    },
+    style: { ...baseStyle, background: '#e0ecf5', border: '1.5px solid #1d2733' },
+    iconTheme: { primary: '#005691', secondary: '#fff' },
   });
 };

@@ -1,11 +1,9 @@
-// src/features/passengers/components/PassengerNameModal.jsx
-// Editar el nombre de un pasajero (ADMIN) — como el modo edición de PassengerModal en client-admin
 import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Input from '../../../shared/components/common/Input';
 import Button from '../../../shared/components/common/Button';
-import { COLORS, SPACING, FONT_SIZE, RADIUS } from '../../../shared/constants/theme';
+import { COLORS, SPACING, FONT_SIZE, FONTS } from '../../../shared/constants/theme';
 
 export default function PassengerNameModal({ passenger, onClose, onSubmit }) {
   const [name, setName] = useState('');
@@ -61,10 +59,10 @@ export default function PassengerNameModal({ passenger, onClose, onSubmit }) {
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  card: { backgroundColor: COLORS.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.lg, paddingBottom: SPACING.xl },
+  overlay: { flex: 1, backgroundColor: 'rgba(29,39,51,0.55)', justifyContent: 'flex-end' },
+  card: { backgroundColor: COLORS.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1.5, borderBottomWidth: 0, borderColor: COLORS.text, padding: SPACING.lg, paddingBottom: SPACING.xl },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
-  title: { fontSize: FONT_SIZE.lg, fontWeight: '800', color: COLORS.text },
+  title: { fontFamily: FONTS.display, fontSize: FONT_SIZE.xl, color: COLORS.text },
   row: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
   flexBtn: { flex: 1 },
 });

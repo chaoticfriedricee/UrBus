@@ -1,5 +1,3 @@
-// src/features/groups/components/GroupListItem.jsx
-// Fila de un grupo — portada de client-admin (features/groups/components/GroupCard.jsx)
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -26,7 +24,7 @@ export default function GroupListItem({ group, canManage, onOpen, onEdit, onTogg
     <TouchableOpacity style={[styles.row, !isActive && styles.inactive]} onPress={() => onOpen(group)} activeOpacity={0.7}>
       <View style={styles.top}>
         <View style={styles.iconWrap}>
-          <MaterialIcons name="groups" size={22} color={COLORS.primary} />
+          <MaterialIcons name="directions-bus" size={22} color={COLORS.primary} />
         </View>
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={1}>{name}</Text>
@@ -51,7 +49,7 @@ export default function GroupListItem({ group, canManage, onOpen, onEdit, onTogg
           <View style={styles.manage}>
             <IconBtn
               icon={isActive ? 'block' : 'check'}
-              color={isActive ? '#b45309' : '#15803d'}
+              color={isActive ? COLORS.warning : COLORS.success}
               label={isActive ? 'Desactivar grupo' : 'Activar grupo'}
               onPress={() => onToggleActive(group)}
             />
@@ -68,16 +66,16 @@ const styles = StyleSheet.create({
   row: { paddingHorizontal: 18, paddingVertical: 14, backgroundColor: COLORS.surface },
   inactive: { opacity: 0.6 },
   top: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm + 4 },
-  iconWrap: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#e8f0fe', alignItems: 'center', justifyContent: 'center' },
+  iconWrap: { width: 46, height: 46, borderRadius: 12, backgroundColor: COLORS.primarySoft, alignItems: 'center', justifyContent: 'center' },
   info: { flex: 1, minWidth: 0 },
-  name: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
-  meta: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted, marginTop: 2 },
+  name: { fontSize: FONT_SIZE.md, fontWeight: '800', color: COLORS.text },
+  meta: { fontSize: 12.5, color: COLORS.textMuted, marginTop: 2 },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SPACING.sm, gap: SPACING.sm },
   codeBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: RADIUS.sm, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, backgroundColor: '#f0f7ff',
+    flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 7,
+    borderRadius: 8, borderWidth: 1.5, borderStyle: 'dashed', borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft,
   },
-  code: { fontSize: FONT_SIZE.sm, fontWeight: '800', letterSpacing: 1.5, color: COLORS.primary },
+  code: { fontSize: FONT_SIZE.sm, fontWeight: '800', letterSpacing: 2, color: COLORS.primary },
   manage: { flexDirection: 'row', gap: 6 },
   iconBtn: { width: 34, height: 34, borderRadius: RADIUS.sm, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
 });

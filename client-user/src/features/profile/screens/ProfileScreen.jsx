@@ -1,6 +1,3 @@
-// src/features/profile/screens/ProfileScreen.jsx
-// Replica el mockup "Perfil": avatar grande con insignia, nombre centrado,
-// filas de datos (correo, teléfono, dirección) y botón "Editar Perfil".
 import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, ScrollView, Alert, StyleSheet } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
@@ -11,7 +8,8 @@ import useAuthStore from '../../../shared/store/authStore';
 import { useMyStatus } from '../../passengers/hooks/useMyStatus';
 import Button from '../../../shared/components/common/Button';
 import Input from '../../../shared/components/common/Input';
-import { COLORS, SPACING, FONT_SIZE, RADIUS, MANAGER_ROLES, ROLE_LABELS, ROLES } from '../../../shared/constants/theme';
+import { ScreenHeader, DashedDivider } from '../../../shared/components/common/Common';
+import { COLORS, SPACING, FONT_SIZE, RADIUS, MANAGER_ROLES, ROLE_LABELS, ROLE_TONES, ROLES, FONTS } from '../../../shared/constants/theme';
 
 export default function ProfileScreen({ navigation }) {
   const user = useAuthStore((state) => state.user);
@@ -25,7 +23,6 @@ export default function ProfileScreen({ navigation }) {
     if (!isManager) fetchStatus();
   }, [isManager, fetchStatus]);
 
-  // El login solo trae id/username/foto/rol; email, nombre y teléfono vienen de /auth/me
   useEffect(() => {
     authClient.get('/auth/me')
       .then(({ data }) => updateUser(data))
@@ -103,9 +100,12 @@ export default function ProfileScreen({ navigation }) {
   const avatarUri = newPhoto?.uri ?? (user?.profilePicture?.startsWith('http') ? user.profilePicture : null);
   const fullName = [user?.name, user?.surname].filter(Boolean).join(' ');
 
+  const roleTone = ROLE_TONES[user?.role] ?? ROLE_TONES.USER_ROLE;
+
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.headerTitle}>Perfil</Text>
+    <View style={styles.screen}>
+    <ScreenHeader title="Mi perfil" subtitle={fullName || user?.username} />
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
 
       <View style={styles.card}>
         <TouchableOpacity onPress={editing ? pickImage : undefined} style={styles.avatarWrapper} activeOpacity={0.85}>
@@ -120,7 +120,10 @@ export default function ProfileScreen({ navigation }) {
         </TouchableOpacity>
 
         <Text style={styles.name}>{fullName || user?.username}</Text>
-        <Text style={styles.role}>{ROLE_LABELS[user?.role] ?? user?.role}</Text>
+        <View style={[styles.roleBadge, { backgroundColor: roleTone.bg }]}>
+          <View style={[styles.roleDot, { backgroundColor: roleTone.color }]} />
+          <Text style={[styles.role, { color: roleTone.color }]}>{ROLE_LABELS[user?.role] ?? user?.role}</Text>
+        </View>
 
         {editing ? (
           <View style={styles.editForm}>
@@ -152,14 +155,14 @@ export default function ProfileScreen({ navigation }) {
               <MaterialIcons name="email" size={18} color={COLORS.textLight} />
               <Text style={styles.infoText}>{user?.email ?? '—'}</Text>
             </View>
-            <View style={styles.infoDivider} />
+            <DashedDivider style={styles.infoDivider} />
             <View style={styles.infoRow}>
               <MaterialIcons name="phone" size={18} color={COLORS.textLight} />
               <Text style={styles.infoText}>{user?.phone ?? '—'}</Text>
             </View>
             {!isManager ? (
               <>
-                <View style={styles.infoDivider} />
+                <DashedDivider style={styles.infoDivider} />
                 <View style={styles.infoRow}>
                   <MaterialIcons name="location-on" size={18} color={COLORS.textLight} />
                   <Text style={styles.infoText}>{myPassenger?.address ?? 'Sin dirección registrada'}</Text>
@@ -194,38 +197,41 @@ export default function ProfileScreen({ navigation }) {
 
       <Button title="Cerrar sesión" variant="secondary" onPress={confirmLogout} style={styles.logoutBtn} />
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.background },
-  content: { padding: SPACING.md, paddingTop: 54 },
-  headerTitle: { fontSize: FONT_SIZE.xl, fontWeight: '800', color: COLORS.text, textAlign: 'center', marginBottom: SPACING.lg },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg, alignItems: 'center' },
+  scroll: { flex: 1 },
+  content: { padding: SPACING.md },
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, borderWidth: 1.5, borderColor: COLORS.border, padding: SPACING.lg, alignItems: 'center' },
   avatarWrapper: { alignItems: 'center', marginBottom: SPACING.sm },
-  avatar: { width: 110, height: 110, borderRadius: 55, backgroundColor: COLORS.border },
+  avatar: { width: 108, height: 108, borderRadius: 54, backgroundColor: COLORS.backgroundAlt, borderWidth: 3, borderColor: COLORS.accent },
   badge: {
-    position: 'absolute', bottom: 22, right: -2, width: 26, height: 26, borderRadius: 13,
-    backgroundColor: COLORS.accentDark, alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', bottom: 22, right: -2, width: 28, height: 28, borderRadius: 14,
+    backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: COLORS.surface,
   },
-  changePhoto: { color: COLORS.primary, marginTop: SPACING.xs, fontSize: FONT_SIZE.sm },
-  name: { fontSize: FONT_SIZE.lg, fontWeight: '800', color: COLORS.text, marginTop: SPACING.xs },
-  role: { fontSize: FONT_SIZE.sm, color: COLORS.textMuted, marginBottom: SPACING.md },
+  changePhoto: { color: COLORS.primary, fontWeight: '700', marginTop: SPACING.xs, fontSize: FONT_SIZE.sm },
+  name: { fontFamily: FONTS.display, fontSize: 24, lineHeight: 28, color: COLORS.text, marginTop: SPACING.xs, textAlign: 'center' },
+  roleBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, marginTop: 6, marginBottom: SPACING.md },
+  roleDot: { width: 7, height: 7, borderRadius: 4 },
+  role: { fontSize: 12.5, fontWeight: '800' },
   infoList: { width: '100%', marginBottom: SPACING.lg },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: 12 },
   infoText: { fontSize: FONT_SIZE.md, color: COLORS.text, flexShrink: 1 },
-  infoDivider: { height: 1, backgroundColor: COLORS.border },
+  infoDivider: { marginHorizontal: 0 },
   editForm: { width: '100%', marginTop: SPACING.sm },
-  error: { color: COLORS.error, marginBottom: SPACING.sm },
+  error: { color: COLORS.error, fontWeight: '700', marginBottom: SPACING.sm },
   row: { flexDirection: 'row', gap: SPACING.sm, width: '100%' },
   flexBtn: { flex: 1 },
   logoutBtn: { marginTop: SPACING.lg, marginBottom: SPACING.xl },
   adminRow: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.md,
-    padding: SPACING.md, borderRadius: RADIUS.xl, backgroundColor: COLORS.surface,
+    padding: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.border,
   },
   adminText: { flex: 1 },
-  adminTitle: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
+  adminTitle: { fontSize: FONT_SIZE.md, fontWeight: '800', color: COLORS.text },
   adminHint: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted, marginTop: 2 },
 });
