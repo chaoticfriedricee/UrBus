@@ -1,14 +1,10 @@
-// src/features/groups/screens/GroupDetailScreen.jsx
-// Detalle de un grupo — portado de client-admin (features/groups/components/GroupDetailModal.jsx):
-// su código de unión (para compartir) y solo los pasajeros de ese grupo.
-// passenger-service responde 403 si el grupo es de otro conductor.
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, FlatList, RefreshControl, TouchableOpacity, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { getGroupById } from '../../../shared/api/groupApi';
 import { shareGroupCode } from '../utils/shareGroupCode';
 import Avatar from '../../../shared/components/common/Avatar';
-import { Card, EmptyState, LoadingSpinner } from '../../../shared/components/common/Common';
+import { Card, EmptyState, LoadingSpinner, DashedDivider } from '../../../shared/components/common/Common';
 import { COLORS, SPACING, FONT_SIZE, RADIUS } from '../../../shared/constants/theme';
 
 export default function GroupDetailScreen({ route, navigation }) {
@@ -51,7 +47,7 @@ export default function GroupDetailScreen({ route, navigation }) {
       {group ? (
         <Card style={styles.codeCard}>
           <View style={styles.codeInfo}>
-            <Text style={styles.codeLabel}>CÓDIGO DE UNIÓN</Text>
+            <Text style={styles.codeLabel}>Código de unión</Text>
             <Text style={styles.codeHint}>Los pasajeros lo ingresan en «Unirme a un grupo» para quedar en este grupo.</Text>
           </View>
           <TouchableOpacity style={styles.codeBtn} onPress={() => shareGroupCode(group)} accessibilityLabel="Compartir código">
@@ -73,7 +69,7 @@ export default function GroupDetailScreen({ route, navigation }) {
           data={passengers}
           keyExtractor={(item) => item._id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={() => <DashedDivider />}
           ListEmptyComponent={
             <EmptyState
               icon="people-outline"
@@ -84,7 +80,7 @@ export default function GroupDetailScreen({ route, navigation }) {
             <View style={styles.row}>
               <Avatar name={item.name} size={36} />
               <Text style={styles.passengerName} numberOfLines={1}>{item.name}</Text>
-              <View style={[styles.dot, { backgroundColor: item.status === 'PRESENT' ? COLORS.presentGreen : '#d1d5db' }]} />
+              <View style={[styles.dot, { backgroundColor: item.status === 'PRESENT' ? COLORS.presentGreen : COLORS.borderStrong }]} />
               <Text style={styles.status}>{item.status === 'PRESENT' ? 'Presente' : 'Ausente'}</Text>
             </View>
           )}
@@ -98,20 +94,20 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background, padding: SPACING.md },
   codeCard: { marginBottom: SPACING.md },
   codeInfo: { marginBottom: SPACING.sm },
-  codeLabel: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.textLight, letterSpacing: 0.5 },
+  codeLabel: { fontSize: 12, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
   codeHint: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted, marginTop: 2 },
   codeBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm,
     paddingVertical: 10, borderRadius: RADIUS.md, borderWidth: 1.5, borderStyle: 'dashed',
-    borderColor: COLORS.primary, backgroundColor: '#f0f7ff',
+    borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft,
   },
-  code: { fontSize: FONT_SIZE.xl, fontWeight: '800', letterSpacing: 3, color: COLORS.primary },
-  inactive: { fontSize: FONT_SIZE.xs, color: '#b45309', marginTop: SPACING.sm },
+  code: { fontSize: FONT_SIZE.xl, fontWeight: '800', letterSpacing: 4, color: COLORS.primary },
+  inactive: { fontSize: FONT_SIZE.xs, color: COLORS.warning, marginTop: SPACING.sm },
   sectionTitle: { fontSize: FONT_SIZE.sm, fontWeight: '700', color: COLORS.textLight, marginBottom: SPACING.sm },
   listCard: { flex: 1, padding: 0, overflow: 'hidden' },
   separator: { height: 1, backgroundColor: COLORS.border, marginHorizontal: 18 },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingHorizontal: 18, paddingVertical: 12 },
   passengerName: { flex: 1, fontSize: FONT_SIZE.md, fontWeight: '600', color: COLORS.text },
-  dot: { width: 8, height: 8, borderRadius: 4 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
   status: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted, width: 56 },
 });

@@ -1,54 +1,58 @@
-// src/shared/components/common/Button.jsx
-// Botón principal con degradado amarillo (igual al de los mockups Login/Registro).
 import React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, SPACING, FONT_SIZE, RADIUS, SHADOWS } from '../../constants/theme';
+import { TouchableOpacity, Text, ActivityIndicator, StyleSheet, View } from 'react-native';
+import { COLORS, SPACING, FONT_SIZE, RADIUS } from '../../constants/theme';
 
 export default function Button({ title, onPress, variant = 'primary', loading = false, disabled = false, style }) {
-  const isSecondary = variant === 'secondary';
-  const isDanger = variant === 'danger';
   const isDisabled = disabled || loading;
-
-  if (isSecondary || isDanger) {
-    return (
-      <TouchableOpacity
-        onPress={onPress}
-        disabled={isDisabled}
-        activeOpacity={0.8}
-        style={[styles.base, isDanger ? styles.dangerOutline : styles.secondary, isDisabled && styles.disabled, style]}
-      >
-        {loading ? (
-          <ActivityIndicator color={isDanger ? COLORS.error : COLORS.primary} />
-        ) : (
-          <Text style={[styles.text, isDanger ? styles.textDanger : styles.textSecondary]}>{title}</Text>
-        )}
-      </TouchableOpacity>
-    );
-  }
+  const tone = TONES[variant] ?? TONES.primary;
 
   return (
-    <TouchableOpacity onPress={onPress} disabled={isDisabled} activeOpacity={0.85} style={[styles.shadowWrap, style]}>
-      <LinearGradient
-        colors={isDisabled ? ['#e5c56b', '#d8b45a'] : [COLORS.accent, COLORS.accentDark]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.base}
-      >
-        {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={[styles.text, styles.textPrimary]}>{title}</Text>}
-      </LinearGradient>
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={isDisabled}
+      activeOpacity={0.85}
+      style={[styles.base, tone.container, isDisabled && styles.disabled, style]}
+    >
+      {loading ? (
+        <ActivityIndicator color={tone.text} />
+      ) : (
+        <View style={styles.content}>
+          <Text style={[styles.text, { color: tone.text }]} numberOfLines={1}>{title}</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
 
+const TONES = {
+  primary: {
+    container: { backgroundColor: COLORS.accent, borderBottomWidth: 4, borderBottomColor: COLORS.accentDark },
+    text: COLORS.text,
+  },
+  blue: {
+    container: { backgroundColor: COLORS.primary, borderBottomWidth: 4, borderBottomColor: COLORS.primaryDark },
+    text: '#ffffff',
+  },
+  secondary: {
+    container: { backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.borderStrong },
+    text: COLORS.text,
+  },
+  danger: {
+    container: { backgroundColor: COLORS.error, borderBottomWidth: 4, borderBottomColor: '#8a2a20' },
+    text: '#ffffff',
+  },
+};
+
 const styles = StyleSheet.create({
-  shadowWrap: { borderRadius: RADIUS.xl, ...SHADOWS.card },
-  base: { minHeight: 50, borderRadius: RADIUS.xl, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
-  secondary: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: COLORS.primary },
-  dangerOutline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: COLORS.error },
-  disabled: { opacity: 0.6 },
+  base: {
+    minHeight: 50,
+    borderRadius: RADIUS.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+  },
+  content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  disabled: { opacity: 0.55 },
   text: { fontSize: FONT_SIZE.md, fontWeight: '700' },
-  textPrimary: { color: '#ffffff' },
-  textSecondary: { color: COLORS.primary },
-  textDanger: { color: COLORS.error },
 });

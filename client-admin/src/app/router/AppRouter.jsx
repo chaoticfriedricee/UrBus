@@ -5,6 +5,7 @@ import { RoleGuard } from './RoleGuard.jsx';
 import { AuthPage } from '../../features/auth/pages/AuthPage.jsx';
 import { VerifyEmailPage } from '../../features/auth/pages/VerifyEmailPage.jsx';
 import { ResetPasswordPage } from '../../features/auth/pages/ResetPasswordPage.jsx';
+import { HomePage } from '../../features/home/pages/HomePage.jsx';
 import { LocationPage } from '../../features/location/pages/LocationPage.jsx';
 import { PassengerListPage } from '../../features/passangers/pages/PassengerListPage.jsx';
 import { GroupListPage } from '../../features/groups/pages/GroupListPage.jsx';
@@ -30,13 +31,12 @@ export const AppRouter = () => {
           </ProtectedRoute>
         }
       >
-        <Route index element={<LocationPage />} />
+        <Route index element={<HomePage />} />
         <Route path='location' element={<LocationPage />} />
         <Route path='passengers' element={<PassengerListPage />} />
         <Route
           path='groups'
           element={
-            // Cada rol ve su propia vista: admin (todos + límites), conductor (los suyos), pasajero (unirse)
             <RoleGuard allowedRoles={['ADMIN_ROLE', 'DRIVER_ROLE', 'PASSENGER_ROLE', 'USER_ROLE']}>
               <GroupListPage />
             </RoleGuard>

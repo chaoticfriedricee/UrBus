@@ -1,6 +1,3 @@
-// src/navigation/MainTabs.jsx
-// Navegación inferior — replica el mockup: Pasajeros, Mapa, Anuncios y Perfil, con el
-// ícono activo resaltado en amarillo. Conductor y admin tienen además "Grupos".
 import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -20,9 +17,18 @@ import useAuthStore from '../shared/store/authStore';
 import { getPosts } from '../shared/api/postApi';
 import useUrgentPostsStore from '../features/posts/store/urgentPostsStore';
 import { hasUnreadUrgent } from '../features/posts/utils/urgent';
-import { COLORS, MANAGER_ROLES } from '../shared/constants/theme';
+import { COLORS, FONTS, MANAGER_ROLES } from '../shared/constants/theme';
 
 const Tab = createBottomTabNavigator();
+
+const STACK_HEADER = {
+  headerShown: true,
+  headerStyle: { backgroundColor: COLORS.primary },
+  headerTintColor: '#ffffff',
+  headerTitleStyle: { fontFamily: FONTS.display, fontSize: 20 },
+  headerShadowVisible: false,
+  contentStyle: { backgroundColor: COLORS.background },
+};
 const PassengersStackNav = createNativeStackNavigator();
 const BusStackNav = createNativeStackNavigator();
 const PostsStackNav = createNativeStackNavigator();
@@ -52,7 +58,7 @@ function PostsStack() {
       <PostsStackNav.Screen
         name="PostDetail"
         component={PostDetailScreen}
-        options={{ headerShown: true, title: 'Anuncio' }}
+        options={{ ...STACK_HEADER, title: 'Anuncio' }}
       />
     </PostsStackNav.Navigator>
   );
@@ -65,13 +71,12 @@ function GroupsStack() {
       <GroupsStackNav.Screen
         name="GroupDetail"
         component={GroupDetailScreen}
-        options={{ headerShown: true, title: 'Grupo' }}
+        options={{ ...STACK_HEADER, title: 'Grupo' }}
       />
     </GroupsStackNav.Navigator>
   );
 }
 
-// "Gestionar usuarios" (solo ADMIN) se abre desde el perfil
 function ProfileStack() {
   return (
     <ProfileStackNav.Navigator screenOptions={{ headerShown: false }}>
@@ -79,7 +84,7 @@ function ProfileStack() {
       <ProfileStackNav.Screen
         name="Users"
         component={UsersScreen}
-        options={{ headerShown: true, title: 'Usuarios' }}
+        options={{ ...STACK_HEADER, title: 'Usuarios' }}
       />
     </ProfileStackNav.Navigator>
   );
@@ -99,8 +104,6 @@ export default function MainTabs() {
   const setUrgentPosts = useUrgentPostsStore((state) => state.setPosts);
   const unreadUrgent = useUrgentPostsStore((state) => hasUnreadUrgent(state.latestAt, state.lastSeenAt));
 
-  // Al entrar se consultan los anuncios una vez para saber si hay urgentes sin revisar
-  // (la pantalla de anuncios lo actualiza cada vez que los carga)
   useEffect(() => {
     getPosts()
       .then(({ data }) => {
@@ -114,27 +117,42 @@ export default function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: COLORS.accentDark,
-        tabBarInactiveTintColor: COLORS.secondary,
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.textMuted,
         tabBarStyle: {
           backgroundColor: COLORS.surface,
-          height: 64,
-          paddingTop: 6,
-          borderTopColor: COLORS.border,
+          height: 66,
+          paddingTop: 8,
+          paddingBottom: 6,
+          borderTopWidth: 1.5,
+          borderTopColor: COLORS.borderStrong,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
         tabBarIcon: ({ color, focused }) => (
-          <View
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 17,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: focused ? '#FFF3CC' : 'transparent',
-            }}
-          >
-            <MaterialIcons name={ICONS[route.name]} size={22} color={color} />
+          <View style={{ alignItems: 'center' }}>
+            <View
+              style={{
+                position: 'absolute',
+                top: -9,
+                width: 26,
+                height: 4,
+                borderBottomLeftRadius: 4,
+                borderBottomRightRadius: 4,
+                backgroundColor: focused ? COLORS.accent : 'transparent',
+              }}
+            />
+            <View
+              style={{
+                width: 44,
+                height: 30,
+                borderRadius: 15,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: focused ? COLORS.primarySoft : 'transparent',
+              }}
+            >
+              <MaterialIcons name={ICONS[route.name]} size={22} color={color} />
+            </View>
           </View>
         ),
       })}
@@ -147,7 +165,7 @@ export default function MainTabs() {
         component={PostsStack}
         options={{
           tabBarBadge: unreadUrgent ? '' : undefined,
-          tabBarBadgeStyle: { minWidth: 10, maxHeight: 10, borderRadius: 5, backgroundColor: COLORS.error, top: 4 },
+          tabBarBadgeStyle: { minWidth: 10, maxHeight: 10, borderRadius: 5, backgroundColor: COLORS.warning, top: 4 },
         }}
       />
       <Tab.Screen name="Perfil" component={ProfileStack} />

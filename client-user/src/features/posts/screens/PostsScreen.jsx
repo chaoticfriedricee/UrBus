@@ -1,10 +1,3 @@
-// src/features/posts/screens/PostsScreen.jsx
-// Pantalla "Anuncios del Bus" — replica el mockup: tarjetas con icono cuadrado,
-// título en negrita y "Hace X min". Para DRIVER_ROLE/ADMIN_ROLE agrega un botón
-// flotante para publicar y acciones de editar/eliminar (funciones portadas de
-// client-admin, features/post/pages/PostListPage.jsx). Los urgentes se destacan en rojo y
-// el ADMIN puede ver los eliminados y restaurarlos. post-service solo devuelve los avisos
-// generales y los del grupo (o grupos) del usuario (al admin, todos).
 import React, { useEffect, useCallback, useState } from 'react';
 import { FlatList, RefreshControl, TouchableOpacity, View, Text, Image, Alert, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -14,9 +7,9 @@ import useUrgentPostsStore from '../store/urgentPostsStore';
 import { getGroups } from '../../../shared/api/groupApi';
 import PostFormModal from '../components/PostFormModal';
 import ConfirmModal from '../../../shared/components/common/ConfirmModal';
-import { EmptyState, LoadingSpinner } from '../../../shared/components/common/Common';
+import { EmptyState, LoadingSpinner, ScreenHeader, HeaderAction } from '../../../shared/components/common/Common';
 import useAuthStore from '../../../shared/store/authStore';
-import { COLORS, SPACING, FONT_SIZE, RADIUS, SHADOWS, MANAGER_ROLES } from '../../../shared/constants/theme';
+import { COLORS, SPACING, FONT_SIZE, RADIUS, MANAGER_ROLES } from '../../../shared/constants/theme';
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
@@ -43,14 +36,12 @@ export default function PostsScreen({ navigation }) {
 
   useEffect(() => { fetchPosts(false); }, [fetchPosts]);
 
-  // Abrir "Anuncios" cuenta como revisar los urgentes (quita el punto rojo de la pestaña)
   useFocusEffect(useCallback(() => { markUrgentSeen(); }, [markUrgentSeen]));
   useEffect(() => {
     setUrgentPosts(posts);
     if (navigation.isFocused()) markUrgentSeen();
   }, [posts, setUrgentPosts, markUrgentSeen, navigation]);
 
-  // Grupos a los que el conductor (o admin) puede dirigir un aviso
   useEffect(() => {
     if (!canManage) return;
     getGroups()
@@ -90,6 +81,11 @@ export default function PostsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <ScreenHeader
+        title={canManage ? 'Anuncios' : 'Avisos'}
+        subtitle={loading ? 'Cargando…' : `${posts.filter((p) => !p.isDeleted).length} anuncios activos`}
+        right={canManage ? <HeaderAction icon="add" label="Nuevo anuncio" onPress={() => setFormModal('create')} /> : null}
+      />
       <FlatList
         style={styles.list}
         contentContainerStyle={styles.listContent}
@@ -120,7 +116,7 @@ export default function PostsScreen({ navigation }) {
           return (
             <TouchableOpacity
               activeOpacity={0.85}
-              // Un eliminado solo lo puede abrir el admin para restaurarlo desde la lista
+
               onPress={() => (item.isDeleted ? null : navigation.navigate('PostDetail', { id: item.id }))}
               style={[styles.card, urgent && styles.cardUrgent, item.isDeleted && styles.cardDeleted]}
             >
@@ -128,12 +124,12 @@ export default function PostsScreen({ navigation }) {
                 <Image source={{ uri: item.image }} style={styles.icon} />
               ) : (
                 <View style={styles.iconPlaceholder}>
-                  <MaterialIcons name="directions-bus" size={26} color={COLORS.accentDark} />
+                  <MaterialIcons name="campaign" size={26} color={COLORS.primary} />
                 </View>
               )}
               <View style={styles.cardBody}>
-                {urgent ? <Text style={styles.urgentLabel}>URGENTE</Text> : null}
-                {item.isDeleted ? <Text style={styles.deletedLabel}>ELIMINADO</Text> : null}
+                {urgent ? <Text style={styles.urgentLabel}>Urgente</Text> : null}
+                {item.isDeleted ? <Text style={styles.deletedLabel}>Eliminado</Text> : null}
                 <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
                 <Text style={styles.cardTime}>
                   {timeAgo(item.createdAt)} · {audienceLabel(item)}
@@ -160,12 +156,6 @@ export default function PostsScreen({ navigation }) {
         }}
       />
 
-      {canManage ? (
-        <TouchableOpacity style={styles.fab} onPress={() => setFormModal('create')} activeOpacity={0.85}>
-          <MaterialIcons name="add" size={26} color="#fff" />
-        </TouchableOpacity>
-      ) : null}
-
       <PostFormModal
         visible={Boolean(formModal)}
         post={formModal?.post}
@@ -190,31 +180,39 @@ export default function PostsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   list: { flex: 1 },
-  listContent: { padding: SPACING.md },
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, marginBottom: SPACING.md, ...SHADOWS.soft },
-  icon: { width: 52, height: 52, borderRadius: RADIUS.md, marginRight: SPACING.md },
-  iconPlaceholder: { width: 52, height: 52, borderRadius: RADIUS.md, marginRight: SPACING.md, backgroundColor: '#FFF6DA', alignItems: 'center', justifyContent: 'center' },
+  listContent: { padding: SPACING.md, paddingBottom: SPACING.xl },
+  card: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
+    borderWidth: 1.5, borderColor: COLORS.border, padding: SPACING.md, marginBottom: SPACING.md, overflow: 'hidden',
+  },
+  icon: { width: 56, height: 56, borderRadius: RADIUS.md, marginRight: SPACING.md },
+  iconPlaceholder: { width: 56, height: 56, borderRadius: RADIUS.md, marginRight: SPACING.md, backgroundColor: COLORS.primarySoft, alignItems: 'center', justifyContent: 'center' },
   cardBody: { flex: 1, minWidth: 0 },
-  cardTitle: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text, lineHeight: 21 },
-  cardTime: { fontSize: 12, color: COLORS.textMuted, marginTop: 6 },
+  cardTitle: { fontSize: FONT_SIZE.md, fontWeight: '800', color: COLORS.text, lineHeight: 21 },
+  cardTime: { fontSize: 12.5, color: COLORS.textMuted, marginTop: 6 },
   cardActions: { flexDirection: 'row', gap: 6, marginLeft: SPACING.sm },
-  iconBtn: { width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e8f0fe' },
-  iconBtnDanger: { backgroundColor: '#fee2e2' },
-  cardUrgent: { backgroundColor: '#fef2f2', borderLeftWidth: 4, borderLeftColor: COLORS.error },
+  iconBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primarySoft },
+  iconBtnDanger: { backgroundColor: COLORS.errorSoft },
+  cardUrgent: { backgroundColor: '#fff4e8', borderLeftWidth: 7, borderLeftColor: COLORS.warning },
   cardDeleted: { opacity: 0.6 },
-  urgentLabel: { fontSize: 10.5, fontWeight: '800', color: COLORS.error, letterSpacing: 0.5, marginBottom: 2 },
-  deletedLabel: { fontSize: 10.5, fontWeight: '800', color: COLORS.textMuted, letterSpacing: 0.5, marginBottom: 2 },
+  urgentLabel: {
+    alignSelf: 'flex-start', overflow: 'hidden', fontSize: 11.5, fontWeight: '800', color: COLORS.warning,
+    backgroundColor: COLORS.warningSoft, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginBottom: 4,
+  },
+  deletedLabel: {
+    alignSelf: 'flex-start', overflow: 'hidden', fontSize: 11.5, fontWeight: '800', color: COLORS.error,
+    backgroundColor: COLORS.errorSoft, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginBottom: 4,
+  },
   restoreBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: SPACING.sm,
-    paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8, backgroundColor: '#dcfce7',
+    paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8, backgroundColor: COLORS.successSoft,
   },
-  restoreText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.success },
+  restoreText: { fontSize: FONT_SIZE.xs, fontWeight: '800', color: COLORS.success },
   deletedToggle: {
     flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginBottom: SPACING.md,
-    paddingHorizontal: 12, paddingVertical: 7, borderRadius: RADIUS.pill, borderWidth: 1.5, borderColor: COLORS.border,
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: RADIUS.pill, borderWidth: 1.5, borderColor: COLORS.borderStrong,
     backgroundColor: COLORS.surface,
   },
-  deletedToggleOn: { borderColor: COLORS.primary, backgroundColor: '#e8f1f9' },
-  deletedToggleText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.primary },
-  fab: { position: 'absolute', right: SPACING.lg, bottom: SPACING.lg, width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', ...SHADOWS.card },
+  deletedToggleOn: { borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft },
+  deletedToggleText: { fontSize: FONT_SIZE.xs, fontWeight: '800', color: COLORS.primary },
 });

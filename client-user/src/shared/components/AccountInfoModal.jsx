@@ -1,12 +1,9 @@
-// src/shared/components/AccountInfoModal.jsx
-// Datos de contacto de una cuenta — portado de client-admin (shared/components/AccountInfoModal.jsx).
-// Lo usan la lista de pasajeros (ADMIN o DRIVER) y la gestión de usuarios (ADMIN).
 import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, Linking, ActivityIndicator, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { getUserById } from '../api/userApi';
 import { formatDateGT } from '../utils/date';
-import { COLORS, SPACING, FONT_SIZE, RADIUS } from '../constants/theme';
+import { COLORS, SPACING, FONT_SIZE, RADIUS, FONTS } from '../constants/theme';
 
 function InfoRow({ icon, label, value, onPress }) {
   const content = (
@@ -21,7 +18,6 @@ function InfoRow({ icon, label, value, onPress }) {
   return onPress && value ? <TouchableOpacity onPress={onPress}>{content}</TouchableOpacity> : content;
 }
 
-/** userId: la cuenta a mostrar (null = cerrado). */
 export default function AccountInfoModal({ userId, onClose }) {
   const [account, setAccount] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -83,10 +79,10 @@ export default function AccountInfoModal({ userId, onClose }) {
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
+  overlay: { flex: 1, backgroundColor: 'rgba(29,39,51,0.55)', alignItems: 'center', justifyContent: 'center', padding: SPACING.lg },
   card: { width: '100%', maxWidth: 400, backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACING.lg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
-  title: { fontSize: FONT_SIZE.lg, fontWeight: '800', color: COLORS.text },
+  title: { fontFamily: FONTS.display, fontSize: FONT_SIZE.xl, color: COLORS.text },
   flex: { flex: 1 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: SPACING.sm },
   infoLabel: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted },

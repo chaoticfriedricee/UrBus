@@ -20,14 +20,12 @@ export const useAuthStore = create(
 
         setUser: (updatedUser) => set({ user: updatedUser }),
 
-        // El login solo devuelve id/username/foto/rol; nombre, apellido, teléfono
-        // y email (que muestran el sidebar y el modal de perfil) vienen de /auth/me.
         loadProfile: async () => {
             try {
                 const { data } = await getMe();
                 set({ user: { ...get().user, ...data } });
             } catch {
-                // Si falla se conservan los datos básicos del login
+                return;
             }
         },
 
@@ -95,9 +93,11 @@ export const useAuthStore = create(
                 const serverMsg = err.response?.data?.message;
 
                 const message =
+                    !err.response ? 'No hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo.' :
                     status === 401 ? 'Correo/usuario o contraseña incorrectos.' :
                     status === 403 ? 'Tu cuenta no tiene permiso para ingresar.' :
-                    status === 404 ? 'El usuario no existe.' :
+                    status === 404 && serverMsg ? 'El usuario no existe.' :
+                    status === 404 ? 'No se encontró el servicio de acceso. Avisa al equipo de soporte.' :
                     status === 423 ? 'Tu cuenta está bloqueada. Contacta al administrador.' :
                     status === 429 ? 'Demasiados intentos. Espera unos minutos.' :
                     serverMsg || 'Error al iniciar sesión. Intenta de nuevo.';
@@ -126,10 +126,6 @@ export const useAuthStore = create(
                     return { success: false, error: message };
                 }
 
-                // El backend manda { message: 'Invalid Arguments', errors: [{field, message}] }
-                // cuando falla la validación de campos. Si no mostramos "errors", el usuario
-                // (y nosotros) solo vemos el mensaje genérico "Invalid Arguments" y no hay
-                // forma de saber qué campo está mal sin abrir DevTools.
                 const fieldErrors = err.response?.data?.errors;
                 const message =
                     (Array.isArray(fieldErrors) && fieldErrors.length > 0
